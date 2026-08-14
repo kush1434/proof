@@ -9,13 +9,15 @@ src/user_config.json
 src/config_merged.json
 test/sim_build
 test/__pycache__/
-test/results.xml
+test/results*.xml
 test/gate_level_netlist.v
 
 # local cocotb runs (test/run.py)
 test/run_out.txt
-test/results.xml
+test/results*.xml
 test/*.fst
 
 # legacy CGMacros environment (see model/requirements-legacy.txt)
 .venv-legacy/
+test/unit_out.txt
+test/mut.txt
