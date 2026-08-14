@@ -34,7 +34,12 @@ HERE = Path(__file__).parent.resolve()
 SRC = HERE.parent / "src"
 
 # Keep in sync with PROJECT_SOURCES in Makefile and source_files in info.yaml.
-PROJECT_SOURCES = ["tt_um_kush1434_proof.v"]
+PROJECT_SOURCES = [
+    "tt_um_kush1434_proof.v",
+    "proof_core.v",
+    "accumulator.v",
+    "mac_serial.v",
+]
 
 
 def plan(args):

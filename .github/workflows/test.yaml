@@ -40,6 +40,14 @@ jobs:
           cd test
           python run.py --unit mac_serial
 
+      # Mutation testing. A green suite proves nothing until it can go red, and
+      # a harness left out of CI rots. This also re-runs the two self-tests --
+      # the CRLF-safe did-not-apply guard, and the check that run.py can report
+      # failure at all (BUGS.md TB-3) -- and aborts if either is broken.
+      - name: Mutation testing
+        shell: bash
+        run: ./mutate.sh
+
       - name: Test Summary
         uses: test-summary/action@v2.4
         with:

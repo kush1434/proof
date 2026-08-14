@@ -20,6 +20,9 @@ project:
   # Keep in sync with PROJECT_SOURCES in test/Makefile.
   source_files:
     - "tt_um_kush1434_proof.v"
+    - "proof_core.v"
+    - "accumulator.v"
+    - "mac_serial.v"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
 pinout:

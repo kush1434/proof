@@ -2,19 +2,14 @@
  * Copyright (c) 2026 Kush Shah
  * SPDX-License-Identifier: Apache-2.0
  *
- * Proof -- flow bring-up skeleton.
+ * Proof -- a fixed-point dot-product engine that estimates how much a meal
+ * will raise blood sugar.
  *
- * This is NOT the final datapath.  It exists to take the full LibreLane flow
- * end to end (RTL sim -> GDS -> gate-level sim) and to produce a utilization
- * report we can size the real network against.
+ * This module is a thin pin wrapper. All behaviour lives in proof_core; the
+ * split keeps the Tiny Tapeout interface separate from the design so the core
+ * can be unit-tested without the pin mapping in the way.
  *
- * It is deliberately a *saturating* accumulator rather than throwaway logic:
- *   - saturation + a sticky overflow flag is a hard requirement of the final
- *     design (the prior CNN accelerator shipped without either, and BUGS.md
- *     lists that as an untestable gap -- not repeating it here), and
- *   - the load-enable on `acc` is exactly the construct that costs a mux2 per
- *     bit in sg13g2, which has no clock-enable flop.  Seeing that cost in the
- *     first report is the point.
+ * Not a medical device. Every output is an estimate.
  */
 
 `default_nettype none
@@ -30,55 +25,36 @@ module tt_um_kush1434_proof (
     input  wire       rst_n     // active-low reset
 );
 
-  // --------------------------------------------------------------------
-  // Host protocol pins.  uio[4:0] are inputs, uio[7:5] are outputs.
-  // --------------------------------------------------------------------
-  wire valid  = uio_in[0];
-  wire last   = uio_in[2];
-  wire rd_sel = uio_in[4];
+  // uio[4:0] host -> chip, uio[7:5] chip -> host.
+  wire valid     = uio_in[0];
+  wire is_weight = uio_in[1];
+  wire last      = uio_in[2];
+  wire rd_sel    = uio_in[4];
 
-  localparam ACC_W = 16;
+  wire [7:0] result;
+  wire       done;
+  wire       saturated;
+  wire       busy;
 
-  reg signed [ACC_W-1:0] acc;
-  reg                    sat;
-  reg                    done;
-  reg                    busy;
+  proof_core u_core (
+      .clk      (clk),
+      .rst_n    (rst_n),
+      .valid    (valid),
+      .is_weight(is_weight),
+      .last     (last),
+      .data     (ui_in),
+      .rd_sel   (rd_sel),
+      .result   (result),
+      .done     (done),
+      .saturated(saturated),
+      .busy     (busy)
+  );
 
-  // Sign-extend the payload byte, then add with one guard bit so that an
-  // overflow is *visible* rather than silently wrapping.
-  wire signed [ACC_W-1:0] term = {{(ACC_W-8){ui_in[7]}}, ui_in};
-  wire signed [ACC_W:0]   sum  = {acc[ACC_W-1], acc} + {term[ACC_W-1], term};
-
-  // Two's-complement overflow: the guard bit disagrees with the sign bit.
-  wire ovf = (sum[ACC_W] != sum[ACC_W-1]);
-
-  // Clamp to the rail we ran off:  sum[ACC_W]==0 -> +max, ==1 -> -min.
-  wire signed [ACC_W-1:0] sum_sat =
-      ovf ? {sum[ACC_W], {(ACC_W-1){~sum[ACC_W]}}} : sum[ACC_W-1:0];
-
-  // Async assert off rst_n -- sg13g2's only flops (dfrbp*) have a native
-  // RESET_B pin, so this costs nothing.  A synchronous reset would add a mux
-  // per bit.  Everything is reset; nothing relies on power-up state, because
-  // the gate-level netlist has no initial values.
-  always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-      acc  <= {ACC_W{1'b0}};
-      sat  <= 1'b0;
-      done <= 1'b0;
-      busy <= 1'b0;
-    end else if (valid) begin
-      acc  <= sum_sat;
-      sat  <= sat | ovf;   // sticky until reset
-      busy <= ~last;
-      done <= last;
-    end
-  end
-
-  assign uo_out  = rd_sel ? acc[ACC_W-1:ACC_W-8] : acc[7:0];
-  assign uio_out = {busy, sat, done, 5'b00000};
+  assign uo_out  = result;
+  assign uio_out = {busy, saturated, done, 5'b00000};
   assign uio_oe  = 8'b1110_0000;  // [7:5] out, [4:0] in
 
-  // List all unused inputs to prevent warnings
-  wire _unused = &{ena, uio_in[7:5], uio_in[3], uio_in[1], 1'b0};
+  // uio_in[3] is MODE, reserved for Mode B and not yet implemented.
+  wire _unused = &{ena, uio_in[7:5], uio_in[3], 1'b0};
 
 endmodule

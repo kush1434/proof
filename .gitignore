@@ -21,3 +21,4 @@ test/*.fst
 .venv-legacy/
 test/unit_out.txt
 test/mut.txt
+test/mut_run.log
