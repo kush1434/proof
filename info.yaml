@@ -1,56 +1,57 @@
 # Tiny Tapeout project information
 project:
-  title:        ""      # Project title
-  author:       ""      # Your name
-  discord:      ""      # Your discord username, for communication and automatically assigning you a Tapeout role (optional)
-  description:  ""      # One line description of what your project does
-  language:     "Verilog" # other examples include SystemVerilog, Amaranth, VHDL, etc
-  clock_hz:     0       # Clock frequency in Hz (or 0 if not applicable)
+  title:        "Proof"
+  author:       "Kush Shah"
+  discord:      ""
+  description:  "Fixed-point dot-product engine that estimates the glycemic response of a meal"
+  language:     "Verilog"
+  clock_hz:     1000000
 
-  # How many tiles your design occupies? A single tile is about 167x108 uM.
-  tiles: "1x1"          # Valid values: 1x1, 1x2, 2x2, 3x2, 4x2, 6x2 or 8x2
+  # How many tiles your design occupies?
+  # A 1x1 tile on ihp-sg13g2 is 202.08 x 154.98 um -- see tile_sizes.yaml in
+  # tt-support-tools. The stock comment here quotes 167x108, which is a stale
+  # Sky130 leftover and is wrong for IHP.
+  tiles: "1x1"
 
-  # Your top module name must start with "tt_um_". Make it unique by including your github username:
-  top_module:  "tt_um_example"
+  # Your top module name must start with "tt_um_".
+  top_module:  "tt_um_kush1434_proof"
 
-  # List your project's source files here.
-  # Source files must be in ./src and you must list each source file separately, one per line.
-  # Don't forget to also update `PROJECT_SOURCES` in test/Makefile.
+  # Source files must be in ./src, listed one per line.
+  # Keep in sync with PROJECT_SOURCES in test/Makefile.
   source_files:
-    - "project.v"
+    - "tt_um_kush1434_proof.v"
 
 # The pinout of your project. Leave unused pins blank. DO NOT delete or add any pins.
-# This section is for the datasheet/website. Use descriptive names (e.g., RX, TX, MOSI, SCL, SEG_A, etc.).
 pinout:
-  # Inputs
-  ui[0]: ""
-  ui[1]: ""
-  ui[2]: ""
-  ui[3]: ""
-  ui[4]: ""
-  ui[5]: ""
-  ui[6]: ""
-  ui[7]: ""
+  # Inputs -- payload byte
+  ui[0]: "DATA_IN[0]"
+  ui[1]: "DATA_IN[1]"
+  ui[2]: "DATA_IN[2]"
+  ui[3]: "DATA_IN[3]"
+  ui[4]: "DATA_IN[4]"
+  ui[5]: "DATA_IN[5]"
+  ui[6]: "DATA_IN[6]"
+  ui[7]: "DATA_IN[7]"
 
-  # Outputs
-  uo[0]: ""
-  uo[1]: ""
-  uo[2]: ""
-  uo[3]: ""
-  uo[4]: ""
-  uo[5]: ""
-  uo[6]: ""
-  uo[7]: ""
+  # Outputs -- result byte selected by RD_SEL
+  uo[0]: "RESULT[0]"
+  uo[1]: "RESULT[1]"
+  uo[2]: "RESULT[2]"
+  uo[3]: "RESULT[3]"
+  uo[4]: "RESULT[4]"
+  uo[5]: "RESULT[5]"
+  uo[6]: "RESULT[6]"
+  uo[7]: "RESULT[7]"
 
-  # Bidirectional pins
-  uio[0]: ""
-  uio[1]: ""
-  uio[2]: ""
-  uio[3]: ""
-  uio[4]: ""
-  uio[5]: ""
-  uio[6]: ""
-  uio[7]: ""
+  # Bidirectional pins -- [4:0] host to chip, [7:5] chip to host
+  uio[0]: "VALID (in)"
+  uio[1]: "IS_WEIGHT (in)"
+  uio[2]: "LAST (in)"
+  uio[3]: "MODE (in)"
+  uio[4]: "RD_SEL (in)"
+  uio[5]: "DONE (out)"
+  uio[6]: "SATURATED (out)"
+  uio[7]: "BUSY (out)"
 
 # Do not change!
 yaml_version: 6

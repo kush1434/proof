@@ -11,3 +11,8 @@ test/sim_build
 test/__pycache__/
 test/results.xml
 test/gate_level_netlist.v
+
+# local cocotb runs (test/run.py)
+test/run_out.txt
+test/results.xml
+test/*.fst
