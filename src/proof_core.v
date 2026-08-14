@@ -96,7 +96,12 @@ module proof_core #(
       .rst_n  (rst_n),
       .start  (mac_start),
       .a      (coef),
-      .b      ($signed(data)),
+      // Connected as a plain net, NOT as $signed(data): a $signed() cast in a
+      // port connection crashes yosys with an internal assertion
+      // (`arg->is_signed == sig.as_wire()->is_signed`, genrtlil.cc:2128).
+      // The widths match and mac_serial declares `b` signed, so the bits pass
+      // through and are interpreted correctly without the cast.
+      .b      (data),
       .product(product),
       .busy   (mac_busy),
       .done   (mac_done)
@@ -173,7 +178,11 @@ module proof_core #(
   // the Python reference's `>>` does on a negative int. Bit-exact by
   // construction, no rounding correction needed on either side.
   wire signed [ACC_W-1:0] gl_full = acc >>> shift;
-  wire signed [GL_W-1:0]  gl = gl_full[GL_W-1:0];
+
+  // Unsigned on purpose: `gl` is only ever bit-extracted for the output
+  // packing, and a part-select is unsigned anyway. The category below is
+  // computed from the full-width signed value, which is what actually matters.
+  wire [GL_W-1:0] gl = gl_full[GL_W-1:0];
 
   // Standard per-serving thresholds: low <= 10, medium 11-19, high >= 20.
   // Categorised from the full-width figure, not the truncated output field.

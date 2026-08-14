@@ -22,7 +22,14 @@ python run.py --gates            # post-layout netlist (needs PDK_ROOT)
 
 | # | Date | Symptom | Test that found it | Root cause | Fix |
 |---|------|---------|--------------------|------------|-----|
-| — | — | *None found to date.* | — | — | — |
+| R-1 | 2026-08-14 | The `gds` workflow died in synthesis: `ERROR: Assert 'arg->is_signed == sig.as_wire()->is_signed' failed in frontends/ast/genrtlil.cc:2128`. All 26 tests passed and Icarus compiled it without complaint | GitHub Actions `gds` job — **nothing in simulation saw it** | `proof_core` connected the multiplier's operand as `.b($signed(data))`. A `$signed()` cast applied inside a module port connection trips an internal yosys assertion. The design was not wrong, it was *unsynthesisable*, and a simulator has no reason to care | Connect `data` as a plain net. The widths match and `mac_serial` declares `b` signed, so the bits are interpreted correctly without the cast. Added `lint.sh`, which elaborates through yosys locally and reproduces this class of failure in about a second instead of a ten-minute CI round trip |
+| R-2 | 2026-08-14 | Verilator `WIDTHEXPAND` warning at `mac_serial.v:57` — surfaced in the Action summary | CI Verilator lint (`LINTER_INCLUDE_PDK_MODELS: 1`) | `step == DW - 1` compares a `CW+1` bit register against a 32-bit integer expression | Introduced `localparam [CW:0] LAST_STEP = DW - 1` and compared against that |
+
+**R-1 is the important one, and the lesson is not about `$signed`.** A design can
+pass every simulation and still be unbuildable, because simulation and
+synthesis disagree about what is legal. Twenty-six passing tests said nothing
+about whether the thing could be made. That is now covered by `./lint.sh` as a
+pre-push gate rather than by waiting for CI.
 
 As of 2026-08-14 Mode A is complete: `mac_serial`, `accumulator`, `proof_core`
 and the pin wrapper. It passes 20 top-level tests and 6 unit tests, every

@@ -54,7 +54,11 @@ module mac_serial #(
   reg                 running;
   reg                 done_r;
 
-  wire last = (step == DW - 1);
+  // Sized explicitly: `step == DW - 1` compares a CW+1 bit reg against a
+  // 32-bit integer expression, which Verilator flags as WIDTHEXPAND.
+  localparam [CW:0] LAST_STEP = DW - 1;
+
+  wire last = (step == LAST_STEP);
 
   wire signed [DW:0] mcand_ext = {mcand[DW-1], mcand};
   wire signed [DW:0] addend    = last ? -mcand_ext : mcand_ext;
