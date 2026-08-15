@@ -132,45 +132,54 @@ second layer is mostly negative — an early version did exactly that and
 reported a cost three to four times too large. The directions are therefore
 seeded from the unconstrained solution's own sign structure.
 
-Held-out **by participant** (a random row split would leak individual response,
-which is the dominant signal):
+Evaluated with **grouped 5-fold cross-validation over participants**. A random
+row split would leak individual response, which is the dominant signal here, and
+a single split cannot tell a real effect from a lucky partition — which matters,
+because it did not:
 
-| | all meals (1,346) | breakfast only (383) |
-|---|---|---|
-| predict the mean | −0.000 | −0.067 |
-| depth-1 XGBoost, the notebook's model | +0.212 | +0.456 |
-| unconstrained MLP 6-8-1 | +0.258 | +0.474 |
-| monotone: carbs ↑ | +0.258 | +0.415 |
-| **monotone: carbs ↑ *and* fibre ↓** | **+0.261** | — |
-| **cost of both guarantees** | **+0.003** | — |
+| model | mean R² | sd | per fold |
+|---|---|---|---|
+| depth-1 XGBoost, the notebook's model | +0.168 | 0.054 | +0.21 +0.14 +0.12 +0.12 +0.25 |
+| unconstrained MLP 6-8-1 | +0.216 | 0.085 | +0.23 +0.25 +0.08 +0.17 +0.34 |
+| monotone: carbs ↑ | +0.180 | 0.108 | +0.18 +0.22 +0.02 +0.13 +0.35 |
+| monotone: carbs ↑ *and* fibre ↓ | +0.189 | 0.143 | +0.15 +0.31 −0.03 +0.15 +0.38 |
 
-The unconstrained fit violates *both* conditions — 4 hidden units disagree on
-carbohydrate and 3 on fibre, 7 unit/input pairs in total — so neither property
-would hold without the constrained objective.
+Differences are **paired across folds** — same partitions, so the difference has
+lower variance than either column and is the honest quantity to report:
 
-Adding the second guarantee is free. The +0.003 is **within noise and should not
-be read as an improvement**; the defensible claim is that two safety guarantees
-cost nothing measurable, not that constraining helps.
+| comparison | delta | 95 % CI | reading |
+|---|---|---|---|
+| carbs ↑ vs unconstrained | −0.036 | [−0.059, −0.012] | **a real, small cost** |
+| carbs ↑ + fibre ↓ vs unconstrained | −0.027 | [−0.092, +0.037] | not established |
+| XGBoost vs unconstrained | −0.048 | [−0.098, +0.003] | not established |
+
+**Monotonicity is not free.** An earlier single 11-participant split reported the
+carbohydrate constraint at −0.000 and this document said so; five folds show
+−0.036 with a confidence interval that excludes zero. The single split was
+optimistic, and the corrected claim is narrower but defensible: **the safety
+property costs a few hundredths of R², which is small relative to a
+between-fold spread of 0.085.**
+
+Two further readings that the single split would have got wrong:
+
+- **The network does not beat the published-style baseline.** The XGBoost
+  comparison straddles zero. Any claim of "beats XGBoost" is unsupported.
+- **The wider interval on carbs + fibre is variance, not merit.** Its per-fold
+  spread (sd 0.143) is the largest in the table; adding a constraint did not
+  make the model better, it made the estimate noisier. Reading "no measurable
+  difference" as "the second guarantee is free" would repeat exactly the
+  mistake the single split caused.
+
+`R² ≈ 0.22` also means most of the variance in postprandial response is *not*
+explained by meal macros plus pre-meal glucose. That is consistent with the
+literature and is a statement about the problem, not a defect in the chip.
 
 Fibre's direction is empirically supported but weakly: marginal r −0.051,
 partial β −0.025, and within every carbohydrate tertile the higher-fibre half
 has the lower iAUC (−111, −1951, −683 mg/dL·min). It is a domain-knowledge
-constraint the data is consistent with, not one the data establishes on its own.
+constraint the data is consistent with, not one the data establishes.
 
-**On the scope Proof actually targets, monotonicity is free.** The constrained
-network matches the unconstrained one to three decimal places and sits slightly
-above the notebook-style baseline. That is the result worth defending: the
-safety property is not a trade-off here, it is available at no measured cost.
-
-Caveats that belong with those numbers:
-
-- One participant split, one seed sweep. No confidence intervals; the gap
-  between +0.212 and +0.258 is **not** established as significant, and should
-  not be reported as "beats XGBoost".
-- The breakfast-only column is a different problem, not a harder one — see §1.5.
-- `R² ≈ 0.26` means most of the variance in postprandial response is *not*
-  explained by meal macros plus pre-meal glucose. That is consistent with the
-  literature and is a statement about the problem, not a defect in the chip.
+Reproduce with `python train.py --cv 5`.
 
 ### 1.5 The baseline's scope is not this project's scope
 

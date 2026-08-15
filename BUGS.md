@@ -195,10 +195,13 @@ misleading as one that omits uncovered things.
   the derived weights are gitignored. `test_trained_network_on_silicon` skips
   unless `model/train.py` has been run locally, and its coverage bin is
   exempted when absent. A green CI run does not exercise it.
-- **Model results rest on one split and one seed sweep.** Held out by
-  participant, but no cross-validation and no confidence intervals. The gap
-  between the depth-1 XGBoost baseline (+0.212) and the monotone network
-  (+0.258) is **not** established as significant.
+- **Model results now use grouped 5-fold cross-validation**, which corrected an
+  earlier single-split claim: monotonicity was reported as costing −0.000 and
+  actually costs −0.036 (95 % CI [−0.059, −0.012]). The single split was a
+  lucky partition. Still open: only one seed sweep per fold, one value of k,
+  and no nested selection.
+- **The network does not beat the published-style baseline.** XGBoost vs the
+  unconstrained network is −0.048 [−0.098, +0.003] — straddles zero.
 - **Timing / setup / hold.** STA reports +9.89 ns setup and +0.121 ns hold
   worst slack at a 20 ns period. Gate-level simulation passes but compiles with
   `-DFUNCTIONAL -DSIM` and **no SDF back-annotation**, so it catches synthesis

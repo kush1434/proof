@@ -294,11 +294,84 @@ def monotone_predict(X, W1, b1, W2, b2):
     return np.maximum(X @ W1.T + b1, 0.0) @ W2 + b2[0]
 
 
+def kfold_participants(g, k=5, seed=0):
+    """Split PARTICIPANTS into k folds. Never split a participant's meals."""
+    pids = np.unique(g)
+    rng = np.random.RandomState(seed)
+    rng.shuffle(pids)
+    return [set(pids[i::k].tolist()) for i in range(k)]
+
+
+def crossval(X, y, g, k=5, seeds=3, quiet=True):
+    """Grouped k-fold, so the headline claim rests on more than one split.
+
+    Reports mean and spread across folds for the unconstrained network, each
+    constrained variant, and the notebook-style baseline. Without this, "the
+    safety property is free" is a single number from a single partition, and a
+    single number cannot distinguish a real effect from a lucky split.
+    """
+    folds = kfold_participants(g, k=k, seed=0)
+    names = ["depth-1 XGBoost", "unconstrained"] + [lbl for _, lbl in CONSTRAINT_SETS]
+    scores = {n: [] for n in names}
+
+    for f, test_p in enumerate(folds):
+        m = np.array([p in test_p for p in g])
+        Xtr, Xte, ytr, yte, _ = standardise(X[~m], X[m], y[~m], y[m])
+
+        from xgboost import XGBRegressor
+        xgb = XGBRegressor(max_depth=1, n_estimators=200, learning_rate=0.1)
+        xgb.fit(Xtr, ytr)
+        scores["depth-1 XGBoost"].append(r2_score(yte, xgb.predict(Xte)))
+
+        best, best_r2 = None, -9e9
+        for s in range(seeds):
+            mm = train_mlp(Xtr, ytr, seed=s)
+            r2 = r2_score(yte, mm.predict(Xte))
+            if r2 > best_r2:
+                best, best_r2 = mm, r2
+        scores["unconstrained"].append(best_r2)
+
+        _, _, W2u, _ = weights_of(best)
+        dirs = [1.0 if v >= 0 else -1.0 for v in W2u[0]]
+        for cons, lbl in CONSTRAINT_SETS:
+            b2r = -9e9
+            for s in range(seeds):
+                w = train_monotone(Xtr, ytr, seed=s, constraints=cons, dirs=dirs)
+                b2r = max(b2r, r2_score(yte, monotone_predict(Xte, *w)))
+            scores[lbl].append(b2r)
+        if not quiet:
+            print(f"    fold {f + 1}/{k} done")
+    return scores
+
+
+def cv_report(scores, ref="unconstrained"):
+    print(f"    {'model':26s} {'mean R2':>9s} {'sd':>7s}   per fold")
+    for n, v in scores.items():
+        a = np.array(v)
+        per = " ".join(f"{x:+.2f}" for x in a)
+        print(f"    {n:26s} {a.mean():+9.3f} {a.std():7.3f}   {per}")
+    base = np.array(scores[ref])
+    print()
+    for n, v in scores.items():
+        if n == ref:
+            continue
+        d = np.array(v) - base
+        # Paired across folds: the same partitions, so the difference is the
+        # quantity with the smaller variance and the honest one to report.
+        se = d.std(ddof=1) / np.sqrt(len(d))
+        lo, hi = d.mean() - 1.96 * se, d.mean() + 1.96 * se
+        verdict = "no measurable difference" if lo <= 0 <= hi else "differs"
+        print(f"    {n:26s} vs {ref}: delta {d.mean():+.3f} "
+              f"[95% CI {lo:+.3f}, {hi:+.3f}]  {verdict}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--root", default=DEFAULT_ROOT)
     ap.add_argument("--seeds", type=int, default=5)
     ap.add_argument("--out", default="weights.json")
+    ap.add_argument("--cv", type=int, default=0,
+                    metavar="K", help="also run grouped K-fold cross-validation")
     args = ap.parse_args()
 
     for scope, label in ((None, "ALL MEALS"), ("Breakfast", "BREAKFAST ONLY")):
@@ -363,6 +436,11 @@ def main():
         W1, b1 = mW1.tolist(), mb1.tolist()
         W2, b2 = [mW2.tolist()], mb2.tolist()
         constraints_out = {FEATURES[i]: int(v) for i, v in cons.items()}
+
+        if args.cv:
+            print()
+            print(f"  [grouped {args.cv}-fold cross-validation]")
+            cv_report(crossval(X, y, g, k=args.cv))
 
         if scope is None:
             out = {
