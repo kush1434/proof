@@ -58,10 +58,12 @@ MODEL = {
     ],
     "monotonicity": ["synthetic_weights", "trained_weights",
                      "trained_weights_decreasing"],
+    "guard": ["weights_ok", "weights_violate", "zero_carb_weight",
+              "violation_sticky", "cleared_by_new_inference"],
 }
 
 # Bins that no reference-model output can reveal, so a test must say so.
-EXPLICIT = {"protocol", "monotonicity"}
+EXPLICIT = {"protocol", "monotonicity", "guard"}
 
 
 class Coverage:
@@ -143,6 +145,9 @@ class Coverage:
                 self.hit("relu", "clamped_to_127")
             else:
                 self.hit("relu", "passthrough")
+
+        self.hit("guard",
+                 "weights_violate" if res["mono_violation"] else "weights_ok")
 
         for y in res["y"]:
             if y > Y_FIELD_HI:

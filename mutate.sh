@@ -282,7 +282,7 @@ run_mutant M15 proof_core.v "top" catch \
 
 run_mutant M16 proof_core.v "top" catch \
   "proof_core: h never rotates, so every layer-2 term reuses h[0]" \
-  -e 's|hreg <= {hreg\[H_W-DW-1:0\], hreg\[H_W-1:H_W-DW\]};|hreg <= hreg;|'
+  -e 's|hreg   <= {hreg\[H_W-DW-1:0\], hreg\[H_W-1:H_W-DW\]};|hreg   <= hreg;|'
 
 run_mutant M17 proof_core.v "top" catch \
   "proof_core: ReLU removed, negatives pass through" \
@@ -319,6 +319,20 @@ run_mutant M23 proof_core.v "top" catch \
 run_mutant M24 proof_core.v "top" catch \
   "proof_core: Mode A output field truncates instead of saturating" \
   -e 's|(gl_full >  8191) ? 14'"'"'h1FFF :|(1'"'"'b0) ? 14'"'"'h1FFF :|'
+
+
+# --- the monotonicity guard ------------------------------------------------
+# The guard is the chip checking its own safety precondition. A guard that
+# cannot fire is worse than no guard, so each of these must be caught.
+run_mutant M25 proof_core.v "top" catch   "proof_core: guard disabled, violations never recorded"   -e 's|if (viol_now) mono_viol <= 1'"'"'b1;|if (1'"'"'b0) mono_viol <= 1'"'"'b1;|'
+
+run_mutant M26 proof_core.v "top" catch   "proof_core: guard ignores the non-zero bit, so a zero weight false-positives"   -e 's#&& (|data) \&\& nzreg\[N_HIDDEN-1\];#;#'
+
+run_mutant M27 proof_core.v "top" catch   "proof_core: sign register does not rotate, so every unit checks unit 0"   -e 's|sgnreg <= {sgnreg\[N_HIDDEN-2:0\], sgnreg\[N_HIDDEN-1\]};|sgnreg <= sgnreg;|'
+
+run_mutant M28 proof_core.v "top" catch   "proof_core: violation not reported on the output pin"   -e 's#assign untrusted = acc_saturated | mono_viol;#assign untrusted = acc_saturated;#'
+
+run_mutant M29 proof_core.v "top" catch   "proof_core: carb sign captured from the wrong byte"   -e 's|carb_sign <= data\[DW-1\];|carb_sign <= 1'"'"'b0;|'
 
 # ---------------------------------------------------------------------------
 restore_all

@@ -36,7 +36,8 @@ RD_SEL = 1 << 4
 
 # uio_out -- chip to host
 DONE = 1 << 5
-SAT = 1 << 6
+UNTRUSTED = 1 << 6
+SAT = UNTRUSTED  # legacy alias: Mode A has no monotonicity notion
 BUSY = 1 << 7
 
 CLK_NS = 10
@@ -519,8 +520,10 @@ async def check_mode_b(dut, l1, l2, s1, s2):
         assert got == gold.wide_bytes(want), (
             f"y[{i}] = {got}, expected {gold.wide_bytes(want)} (raw {want})"
         )
-    got_sat = bool(flags(dut) & SAT)
-    assert got_sat == exp["saturated"], f"saturated {got_sat} != {exp['saturated']}"
+    got = bool(flags(dut) & UNTRUSTED)
+    assert got == exp["untrusted"], (
+        f"untrusted {got} != {exp['untrusted']} "
+        f"(saturated={exp['saturated']} mono_violation={exp['mono_violation']})")
     cov.sample_mode_b(l1, l2, s1, s2, exp)
     return exp
 
@@ -622,8 +625,12 @@ async def test_mode_b_sticky_flag_spans_neurons(dut):
     """
     await setup(dut)
     # Neuron 0 saturates; every later neuron is small and cannot overflow.
+    # W2[0] is negative so unit 0's two signs AGREE: this weight set saturates
+    # without also violating the sign condition. Both causes share one output
+    # pin, so a saturation test built on violating weights would pass on the
+    # guard alone and could not tell the two apart.
     l1 = [[(-128, -128)] * 520] + [[(1, 1)] for _ in range(gold.N_HIDDEN - 1)]
-    W2 = [[1] * gold.N_HIDDEN + [0, 0]]
+    W2 = [[-1] + [1] * (gold.N_HIDDEN - 1) + [0, 0]]
     exp = await check_mode_b(dut, l1, W2, s1=0, s2=0)
     assert exp["saturated"]
     assert flags(dut) & SAT, "overflow from hidden neuron 0 was lost"
@@ -634,12 +641,17 @@ async def test_mode_b_sticky_flag_spans_neurons(dut):
 async def test_mode_b_new_inference_clears_flag(dut):
     """LAST on the opening shift byte starts a fresh inference."""
     await setup(dut)
+    # W2[0] is negative so unit 0's two signs AGREE: this weight set saturates
+    # without also violating the sign condition. Both causes share one output
+    # pin, so a saturation test built on violating weights would pass on the
+    # guard alone and could not tell the two apart.
     l1 = [[(-128, -128)] * 520] + [[(1, 1)] for _ in range(gold.N_HIDDEN - 1)]
-    W2 = [[1] * gold.N_HIDDEN + [0, 0]]
+    W2 = [[-1] + [1] * (gold.N_HIDDEN - 1) + [0, 0]]
     await check_mode_b(dut, l1, W2, s1=0, s2=0)
     assert flags(dut) & SAT
     clean = [[(1, 1)] for _ in range(gold.N_HIDDEN)]
-    await check_mode_b(dut, clean, W2, s1=0, s2=0)
+    # (1, 1) against W2[0] = -1 would disagree, so use an all-positive W2 here.
+    await check_mode_b(dut, clean, [[1] * gold.N_HIDDEN + [0, 0]], s1=0, s2=0)
     assert not flags(dut) & SAT, "a new inference must clear the sticky flag"
     cov.hit("protocol", "new_inference_flag")
 
@@ -668,6 +680,94 @@ async def test_mode_b_output_field_saturates_both_ways(dut):
     lo = await check_mode_b(dut, l1, [[-128] * gold.N_HIDDEN + [0, 0]], s1=0, s2=0)
     assert lo["y"][0] == 8 * -128 * 127, lo["y"]
     assert lo["y"][0] < -32768, "did not undercut the field, so it proves nothing"
+
+
+# ======================================================= MONOTONICITY GUARD ==
+#
+# The safety property is a property of the WEIGHTS. Since the host streams a
+# different weight set per patient and an unconstrained per-person refit
+# violates the condition in 44 of 44 cases measured on CGMacros, the chip
+# checks its own precondition instead of trusting the stream.
+
+
+@cocotb.test()
+async def test_guard_passes_valid_weights(dut):
+    """A weight set that satisfies the sign condition must NOT be flagged."""
+    await setup(dut)
+    l1 = [[(20, 5), (3, 2)] for _ in range(gold.N_HIDDEN)]   # carb weight +20
+    l2 = [[7] * gold.N_HIDDEN + [0, 0]]                      # all W2 positive
+    exp = await check_mode_b(dut, l1, l2, s1=0, s2=0)
+    assert not exp["mono_violation"]
+    assert not flags(dut) & UNTRUSTED, "valid weights were flagged"
+
+
+@cocotb.test()
+async def test_guard_catches_violating_weights(dut):
+    """One hidden unit whose two signs disagree must raise UNTRUSTED.
+
+    This is the case that matters: the arithmetic is still perfectly correct,
+    the result is still bit-exact against the reference, and the monotonicity
+    guarantee is nonetheless void. Nothing else on the chip can tell.
+    """
+    await setup(dut)
+    l1 = [[(20, 5), (3, 2)] for _ in range(gold.N_HIDDEN)]
+    l1[3] = [(-20, 5), (3, 2)]                  # unit 3 opposes carbohydrate
+    l2 = [[7] * gold.N_HIDDEN + [0, 0]]         # while W2[3] is positive
+    exp = await check_mode_b(dut, l1, l2, s1=0, s2=0)
+    assert exp["mono_violation"], "reference should flag this weight set"
+    assert flags(dut) & UNTRUSTED, "guard missed a sign-condition violation"
+    cov.hit("guard", "violation_sticky")
+
+
+@cocotb.test()
+async def test_guard_allows_opposing_pairs(dut):
+    """A unit may oppose carbohydrate TWICE and still be monotone.
+
+    W1 negative with W2 negative gives a non-negative product, so the guard
+    must not fire. A naive 'all weights positive' check would fail here.
+    """
+    await setup(dut)
+    l1 = [[(20, 5), (3, 2)] for _ in range(gold.N_HIDDEN)]
+    l1[2] = [(-20, 5), (3, 2)]
+    l2 = [[7] * gold.N_HIDDEN + [0, 0]]
+    l2[0][2] = -7                                # both negative on unit 2
+    exp = await check_mode_b(dut, l1, l2, s1=0, s2=0)
+    assert not exp["mono_violation"]
+    assert not flags(dut) & UNTRUSTED, "double-negative unit wrongly flagged"
+
+
+@cocotb.test()
+async def test_guard_zero_carb_weight_is_not_a_violation(dut):
+    """A zero carbohydrate weight gives a zero product, which is >= 0.
+
+    This is why the guard carries a non-zero bit per unit as well as a sign:
+    sign alone would read 0 as positive and flag it against a negative W2.
+    """
+    await setup(dut)
+    l1 = [[(20, 5), (3, 2)] for _ in range(gold.N_HIDDEN)]
+    l1[5] = [(0, 5), (3, 2)]                     # unit 5 ignores carbohydrate
+    l2 = [[7] * gold.N_HIDDEN + [0, 0]]
+    l2[0][5] = -7                                # negative, but product is 0
+    exp = await check_mode_b(dut, l1, l2, s1=0, s2=0)
+    assert not exp["mono_violation"], "zero weight cannot violate"
+    assert not flags(dut) & UNTRUSTED, "zero carb weight wrongly flagged"
+    cov.hit("guard", "zero_carb_weight")
+
+
+@cocotb.test()
+async def test_guard_flag_clears_on_new_inference(dut):
+    """LAST on the shift byte starts a fresh inference and clears the guard."""
+    await setup(dut)
+    l1 = [[(20, 5), (3, 2)] for _ in range(gold.N_HIDDEN)]
+    bad = [x[:] for x in l1]
+    bad[1] = [(-20, 5), (3, 2)]
+    l2 = [[7] * gold.N_HIDDEN + [0, 0]]
+
+    await check_mode_b(dut, bad, l2, s1=0, s2=0)
+    assert flags(dut) & UNTRUSTED
+    await check_mode_b(dut, l1, l2, s1=0, s2=0)
+    assert not flags(dut) & UNTRUSTED, "guard flag survived a new inference"
+    cov.hit("guard", "cleared_by_new_inference")
 
 
 @cocotb.test()

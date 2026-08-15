@@ -32,10 +32,28 @@ terms. In layer 2 the chip supplies the constants 127 and 1 after the eight
 hidden values, so a bias is `v8·127 + v9·1` — exact to the unit for any 15-bit
 value.
 
+### The chip checks its own safety precondition
+
+The monotonicity property below holds only if the streamed weights satisfy
+`W1[j][carb] · W2[j] ≥ 0` for every hidden unit. That is a property of the
+weights, not of the design — and since the host streams a different weight set
+per patient, trusting it is not good enough. Refitting an unconstrained network
+per person violates the condition in **44 of 44** cases measured on CGMacros.
+
+So the chip checks. Both operands already pass through the pins: the first
+weight byte of hidden neuron `j` is `W1[j][carb]`, and layer-2 weight byte `k`
+is `W2[k]`. Their signs ride a register that rotates in lockstep with the
+hidden-activation register, and a disagreement raises `UNTRUSTED`. A unit is
+free to oppose carbohydrate *twice* — negative on both sides is a non-negative
+product — and a zero weight can never trigger it, which is why a non-zero bit
+is carried alongside each sign.
+
 ### Everything saturates
 
-The accumulator clamps instead of wrapping and raises a sticky `SATURATED`
-flag, and so do the output fields. This is not only about producing a sensible
+The accumulator clamps instead of wrapping and raises the same sticky
+`UNTRUSTED` flag, and so do the output fields. One pin covers both: a numeric
+overflow and a void guarantee mean the same thing to a caller — do not act on
+this output — and the host holds the weights, so it can always tell which. This is not only about producing a sensible
 number: **a saturating sum is monotone and a wrapping one is not.**
 
 That matters because the design's headline property is
@@ -76,7 +94,7 @@ then 127, then 1.
 new inference", which resets the neuron counter and clears the sticky overflow
 flag. Mode A ignores it, since every Mode A stream is its own inference.
 
-`DONE` marks a neuron complete and its result readable. `RD_SEL` selects which
+`UNTRUSTED` marks the result unsafe to act on. `DONE` marks a neuron complete and its result readable. `RD_SEL` selects which
 byte appears on `RESULT`:
 
 | | `RD_SEL` = 0 | `RD_SEL` = 1 |

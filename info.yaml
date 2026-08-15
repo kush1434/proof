@@ -53,7 +53,7 @@ pinout:
   uio[3]: "MODE (in)"
   uio[4]: "RD_SEL (in)"
   uio[5]: "DONE (out)"
-  uio[6]: "SATURATED (out)"
+  uio[6]: "UNTRUSTED (out)"
   uio[7]: "BUSY (out)"
 
 # Do not change!

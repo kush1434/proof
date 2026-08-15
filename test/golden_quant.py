@@ -140,6 +140,30 @@ def dot(pairs):
     return acc, saturated
 
 
+def sign_violation(l1_neurons, l2_neurons, carb_index=0):
+    """Does this weight set void the monotonicity guarantee?
+
+    Mirrors the chip's guard exactly. The first weight of hidden neuron j is
+    W1[j][carb]; layer-2 weight k (k < N_HIDDEN) is W2[k]. A product is
+    negative only when the signs differ AND neither operand is zero, so a zero
+    carbohydrate weight can never trigger it.
+
+    Checked for every output neuron, because the chip's sign register rotates
+    a full turn per neuron and so re-checks each one.
+    """
+    signs = []
+    for pairs in l1_neurons:
+        w = pairs[carb_index][0] if len(pairs) > carb_index else 0
+        signs.append(w)
+    for weights in l2_neurons:
+        for k, v in enumerate(weights):
+            if k >= len(signs):
+                break
+            if signs[k] * v < 0:
+                return True
+    return False
+
+
 def mode_b(l1_neurons, l2_neurons, s1, s2):
     """Two-layer inference.
 
@@ -162,7 +186,12 @@ def mode_b(l1_neurons, l2_neurons, s1, s2):
         saturated = saturated or ovf
         y.append(requantize(acc, s2))
 
-    return {"h": h, "y": y, "saturated": saturated}
+    violated = sign_violation(l1_neurons, l2_neurons)
+    return {"h": h, "y": y, "saturated": saturated,
+            "mono_violation": violated,
+            # What the chip reports on one pin: either way the answer should
+            # not be acted on.
+            "untrusted": saturated or violated}
 
 
 def sat_field(v, bits):

@@ -75,7 +75,7 @@ module proof_core #(
     input  wire          rd_sel,     // selects the result byte
     output wire [DW-1:0] result,
     output wire          done,       // neuron complete, result valid
-    output wire          saturated,  // sticky across the whole inference
+    output wire          untrusted,  // sticky: saturation OR monotonicity void
     output wire          busy        // do not present a byte while high
 );
 
@@ -104,6 +104,30 @@ module proof_core #(
   reg [H_W-1:0]       hreg;      // hidden activations, shift register
   reg                 res_is_h;  // what the result register currently holds
 
+  // ------------------------------------------------- MONOTONICITY GUARD ---
+  // The safety property holds only if every hidden unit satisfies
+  //     W1[j][carb] * W2[j] >= 0
+  // and that is a property of the WEIGHTS, not of this design. Since the host
+  // streams a different weight set per patient, trusting it is not good
+  // enough: refitting an unconstrained network per person violates the
+  // condition in 44 of 44 cases measured on CGMacros. So the chip checks it.
+  //
+  // Both operands pass through the pins already. The first weight byte of
+  // hidden neuron j is W1[j][carb] -- carbohydrate is input 0 by convention --
+  // and layer-2 weight byte k is W2[k]. Their signs are carried in a register
+  // that shifts and rotates in lockstep with `hreg`, so the sign for the unit
+  // whose activation is being consumed is always at the top.
+  //
+  // Sign alone is not sufficient: a product is negative only if the signs
+  // differ AND neither operand is zero, so a non-zero bit is carried too.
+  // Without it a legitimately zero carbohydrate weight would be flagged.
+  reg [N_HIDDEN-1:0]  sgnreg;    // sign of W1[j][carb] per hidden unit
+  reg [N_HIDDEN-1:0]  nzreg;     // and whether it is non-zero
+  reg                 carb_sign; // captured for the neuron in flight
+  reg                 carb_nz;
+  reg                 first_wt;  // next weight byte is this neuron's carb weight
+  reg                 mono_viol; // sticky, spans the whole inference
+
   wire accept   = (state == S_IDLE) || (state == S_RUN);
   wire take     = valid && accept;
   wire take_wt  = take && is_weight;
@@ -123,6 +147,11 @@ module proof_core #(
   wire [DW-1:0] hsrc = (hk <  N_HIDDEN[NW-1:0]) ? hreg[H_W-1:H_W-DW] :
                        (hk == N_HIDDEN[NW-1:0]) ? {{(DW-7){1'b0}}, 7'd127} :
                                                   {{(DW-1){1'b0}}, 1'b1};
+
+  // A layer-2 weight disagrees with its unit's carbohydrate weight.
+  wire l2_weight   = l2_active && take_wt && (hk < N_HIDDEN[NW-1:0]);
+  wire viol_now    = l2_weight && (data[DW-1] ^ sgnreg[N_HIDDEN-1])
+                     && (|data) && nzreg[N_HIDDEN-1];
 
   // ---------------------------------------------------------------- MAC ---
   // Layer 2 has no activation bytes, so a weight byte is both the coefficient
@@ -161,6 +190,7 @@ module proof_core #(
   wire add_en = (state == S_ACC);
 
   wire signed [ACC_W-1:0] acc;
+  wire                    acc_saturated;
 
   accumulator #(
       .ACC_W (ACC_W),
@@ -173,7 +203,7 @@ module proof_core #(
       .add_en   (add_en),
       .term     (product),
       .acc      (acc),
-      .saturated(saturated)
+      .saturated(acc_saturated)
   );
 
   // ------------------------------------------- REQUANTISE / CATEGORISE ---
@@ -221,18 +251,28 @@ module proof_core #(
       hk       <= {NW{1'b0}};
       hreg     <= {H_W{1'b0}};
       res_is_h <= 1'b0;
+      sgnreg   <= {N_HIDDEN{1'b0}};
+      nzreg    <= {N_HIDDEN{1'b0}};
+      carb_sign <= 1'b0;
+      carb_nz  <= 1'b0;
+      first_wt <= 1'b0;
+      mono_viol <= 1'b0;
     end else begin
       case (state)
         S_IDLE: begin
           // The shift byte opens a neuron. An activation here is a protocol
           // error and is ignored.
           if (take_wt) begin
-            shift  <= data[SHIFT_W-1:0];
-            mode_r <= mode;
-            hk     <= {NW{1'b0}};
-            done_r <= 1'b0;
-            state  <= S_RUN;
-            if (!mode || last) neuron <= {NW{1'b0}};
+            shift    <= data[SHIFT_W-1:0];
+            mode_r   <= mode;
+            hk       <= {NW{1'b0}};
+            done_r   <= 1'b0;
+            first_wt <= 1'b1;
+            state    <= S_RUN;
+            if (!mode || last) begin
+              neuron    <= {NW{1'b0}};
+              mono_viol <= 1'b0;
+            end
           end
         end
 
@@ -244,11 +284,21 @@ module proof_core #(
               hk     <= hk + 1'b1;
               last_r <= last;
               state  <= S_MULT;
-              if (hk < N_HIDDEN[NW-1:0])
-                hreg <= {hreg[H_W-DW-1:0], hreg[H_W-1:H_W-DW]};
+              if (viol_now) mono_viol <= 1'b1;
+              if (hk < N_HIDDEN[NW-1:0]) begin
+                hreg   <= {hreg[H_W-DW-1:0], hreg[H_W-1:H_W-DW]};
+                sgnreg <= {sgnreg[N_HIDDEN-2:0], sgnreg[N_HIDDEN-1]};
+                nzreg  <= {nzreg[N_HIDDEN-2:0], nzreg[N_HIDDEN-1]};
+              end
             end
           end else if (take_wt) begin
             coef <= data;
+            // First weight byte of a hidden neuron is its carbohydrate weight.
+            if (first_wt) begin
+              carb_sign <= data[DW-1];
+              carb_nz   <= |data;
+              first_wt  <= 1'b0;
+            end
           end else if (take_act) begin
             last_r <= last;
             state  <= S_MULT;
@@ -271,8 +321,11 @@ module proof_core #(
           res_is_h <= mode_r && !layer2;
           if (mode_r && !layer2) begin
             hreg   <= {hreg[H_W-DW-1:0], h_new};
+            sgnreg <= {sgnreg[N_HIDDEN-2:0], carb_sign};
+            nzreg  <= {nzreg[N_HIDDEN-2:0], carb_nz};
             neuron <= neuron + 1'b1;
           end
+          first_wt <= 1'b1;
           done_r <= 1'b1;
           state  <= S_IDLE;
         end
@@ -285,6 +338,10 @@ module proof_core #(
   // ------------------------------------------------------------ OUTPUTS ---
   assign result = mode_r ? (rd_sel ? wide[15:8] : wide[7:0])
                          : (rd_sel ? {cat, gl[GL_W-1:DW]} : gl[DW-1:0]);
+  // One pin, two ways the answer can be wrong. Both mean the same thing to a
+  // caller -- do not act on this output -- and there is no spare pin to
+  // separate them. The host holds the weights, so it can always tell which.
+  assign untrusted = acc_saturated | mono_viol;
   assign done   = done_r;
   assign busy   = (state == S_MULT) || (state == S_ACC) || (state == S_FIN);
 

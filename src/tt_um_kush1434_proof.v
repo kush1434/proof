@@ -34,7 +34,7 @@ module tt_um_kush1434_proof (
 
   wire [7:0] result;
   wire       done;
-  wire       saturated;
+  wire       untrusted;
   wire       busy;
 
   proof_core u_core (
@@ -48,12 +48,12 @@ module tt_um_kush1434_proof (
       .rd_sel   (rd_sel),
       .result   (result),
       .done     (done),
-      .saturated(saturated),
+      .untrusted(untrusted),
       .busy     (busy)
   );
 
   assign uo_out  = result;
-  assign uio_out = {busy, saturated, done, 5'b00000};
+  assign uio_out = {busy, untrusted, done, 5'b00000};
   assign uio_oe  = 8'b1110_0000;  // [7:5] out, [4:0] in
 
   wire _unused = &{ena, uio_in[7:5], 1'b0};
