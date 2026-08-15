@@ -94,6 +94,13 @@ fields, which is monotone. The study now reports zero violations.
 
 - It **does** establish that the arithmetic preserves monotonicity, and that
   the property now survives all the way to what the host reads.
+- The sign condition is **sufficient, not necessary**. A network violating it
+  may still be monotone over the reachable input region. Nothing here searches
+  for that weaker guarantee.
+- The sweep in `test_monotonic_in_carbohydrate` is over one deliberately chosen
+  weight set that straddles the field limit, plus 400 randomised sets in the
+  model study. It is not exhaustive over weight space, which is far too large.
+
 ### 1.4 Does a *real* trained network satisfy the sign condition?
 
 No — not unless it is trained to. Fitting the network to CGMacros without the
@@ -169,12 +176,6 @@ against the integer reference **and** that the reported response never falls.
 
 It **skips in CI**, because the weights are derived from a CC BY-NC-SA dataset
 and are deliberately not committed. A green CI run does not exercise it.
-- The sign condition is **sufficient, not necessary**. A network violating it
-  may still be monotone over the reachable input region. Nothing here searches
-  for that weaker guarantee.
-- The sweep in `test_monotonic_in_carbohydrate` is over one deliberately chosen
-  weight set that straddles the field limit, plus 400 randomised sets in the
-  model study. It is not exhaustive over weight space, which is far too large.
 
 ---
 
