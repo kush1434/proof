@@ -174,34 +174,47 @@ be a lie in a different direction.
 
 Recorded so nobody reads "all tests passed" as "everything is verified."
 
+This list is maintained as things change. Four entries were removed on
+2026-08-14 because they had become false — monotonicity was investigated,
+`golden_float.py` was written, and gate-level simulation now runs against the
+current design on every build. A list that names covered things is as
+misleading as one that omits uncovered things.
+
+- **Monotonicity is verified for carbohydrate only.** The property is stated,
+  proved and tested for the carbohydrate input. Nothing checks whether the
+  response is monotone — in either direction — in fibre, fat, protein,
+  pre-meal glucose or time of day. Fibre in particular has a plausible
+  monotone-decreasing expectation that is entirely unexamined.
+- **The quantisation error bound has been measured but not chosen.** Median
+  relative error 0.6 %, p95 2.8 % over random networks. No bound has been
+  defended for this application, and that is a judgement with a safety
+  argument attached rather than a number to be picked by whoever is closest.
+- **The trained-network test does not run in CI.** CGMacros is CC BY-NC-SA, so
+  the derived weights are gitignored. `test_trained_network_on_silicon` skips
+  unless `model/train.py` has been run locally, and its coverage bin is
+  exempted when absent. A green CI run does not exercise it.
+- **Model results rest on one split and one seed sweep.** Held out by
+  participant, but no cross-validation and no confidence intervals. The gap
+  between the depth-1 XGBoost baseline (+0.212) and the monotone network
+  (+0.258) is **not** established as significant.
+- **Timing / setup / hold.** STA reports +9.89 ns setup and +0.121 ns hold
+  worst slack at a 20 ns period. Gate-level simulation passes but compiles with
+  `-DFUNCTIONAL -DSIM` and **no SDF back-annotation**, so it catches synthesis
+  differences, X-propagation and missing resets while saying nothing about
+  setup or hold. Timing is claimed on STA alone.
+- **Only `DW = 8` and `N_HIDDEN = 8` are verified.** Both are parameters; no
+  other value has been simulated, and the M2 equivalence argument is specific
+  to `DW = 8`.
 - **Mode B topology is partly structural.** The hidden count is fixed at 8 by
   the depth of the h shift register. The *input* count is not fixed — a neuron
   ends when the host says LAST — and neither is the output count, since the
   host simply stops streaming. Only `N_HIDDEN` would need an RTL change, and
   only before tapeout.
-- **Only DW = 8 and N_HIDDEN = 8 are verified.** Both are parameters; no other
-  value has been simulated.
-- **Monotonicity.** Not started. It depends on trained weights, and the sign
-  structure of `W1`'s carbohydrate column has not been inspected. This is the
-  project's headline property and it is currently unverified.
-- **The float golden model.** `golden_quant.py` exists and the RTL matches it
-  bit-exactly. `golden_float.py` does not exist yet, so the quantisation error
-  bound is entirely unmeasured.
-- **Timing / setup / hold.** Gate-level simulation compiles with
-  `-DFUNCTIONAL -DSIM` and **no SDF back-annotation**. It catches synthesis
-  differences, X-propagation and missing resets; it says nothing about setup or
-  hold. STA reported +11.07 ns setup and +0.129 ns hold worst slack at a 20 ns
-  period on the *skeleton* — that figure predates the current datapath and has
-  not been re-measured.
-- **Gate-level sim of the current design.** The last GL run was against the
-  bring-up skeleton. Mode A has not been through GL yet.
+- **Host-side quantisation is trusted.** The chip accepts whatever shift byte
+  and INT8 scaling the host chose. Nothing on-chip validates that a shift is
+  sensible; a shift >= 24 simply replicates the sign bit. Well-defined,
+  untested.
+- **Coverage is functional, not structural.** 48 named bins, all hit, but there
+  is no line, toggle or FSM-state coverage — Icarus does not produce it. A bin
+  model only covers situations someone thought to name.
 - **CDC.** Single clock domain by construction, so nothing to check.
-- **`mac_serial` for `DW ≠ 8`.** Parameterised, but only `DW = 8` is verified,
-  and the M2 equivalence argument is specific to that width.
-- **Host-side quantisation.** The chip trusts the shift byte and the INT8
-  scaling the host chose. Nothing on-chip validates that a shift is sensible,
-  and a shift ≥ 24 simply replicates the sign bit. Well-defined, untested.
-- **Coverage is functional, not structural.** 48 named bins, all hit, but
-  there is no line, toggle or FSM-state coverage from the simulator -- Icarus
-  does not produce it. A bin model only covers situations someone thought to
-  name.
