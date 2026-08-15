@@ -56,7 +56,8 @@ MODEL = {
         "sticky_coefficient",
         "busy_done_handoff",
     ],
-    "monotonicity": ["synthetic_weights", "trained_weights"],
+    "monotonicity": ["synthetic_weights", "trained_weights",
+                     "trained_weights_decreasing"],
 }
 
 # Bins that no reference-model output can reveal, so a test must say so.

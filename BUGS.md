@@ -180,11 +180,13 @@ This list is maintained as things change. Four entries were removed on
 current design on every build. A list that names covered things is as
 misleading as one that omits uncovered things.
 
-- **Monotonicity is verified for carbohydrate only.** The property is stated,
-  proved and tested for the carbohydrate input. Nothing checks whether the
-  response is monotone — in either direction — in fibre, fat, protein,
-  pre-meal glucose or time of day. Fibre in particular has a plausible
-  monotone-decreasing expectation that is entirely unexamined.
+- **Monotonicity covers carbohydrate and fibre only.** Nothing checks fat,
+  protein, pre-meal glucose or time of day, and no direction is claimed for
+  them. `tod` has a strong marginal association (r −0.221) and is left
+  unconstrained.
+- **Fibre's direction is domain knowledge, not a data finding.** Marginal
+  r −0.051 and partial β −0.025 are weak. The data is consistent with it and
+  does not establish it.
 - **The quantisation error bound has been measured but not chosen.** Median
   relative error 0.6 %, p95 2.8 % over random networks. No bound has been
   defended for this application, and that is a judgement with a safety

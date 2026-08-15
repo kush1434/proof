@@ -20,8 +20,15 @@ cd .. && ./lint.sh               # local pre-push synthesis gate
 
 ## 1. The headline result: monotonicity in carbohydrate
 
-**Property.** Holding every other input fixed, increasing the carbohydrate
-input must never decrease the predicted response.
+**Properties.** Holding every other input fixed:
+
+- increasing **carbohydrate** must never *decrease* the predicted response;
+- increasing **fibre** must never *increase* it.
+
+The argument below is written for carbohydrate. It is direction-agnostic: for a
+decreasing input the required sign simply flips, and `monotonicity.py` §[4]
+demonstrates both halves — 0 violations when the condition holds, 7 when it is
+deliberately broken.
 
 This is the one claim about the chip worth proving rather than sampling, and it
 requires **zero patient data** — it is a question about the quantised
@@ -56,11 +63,12 @@ Composition therefore gives: `y` is non-decreasing in `x_c` **provided that for
 every hidden unit j**
 
 ```
-W1[j][c] * W2[j] >= 0        (the SIGN CONDITION)
+W1[j][i] * W2[j] * want[i] >= 0        (the SIGN CONDITION)
 ```
 
-each hidden unit either helps carbohydrate raise the response, or opposes it
-twice and so still raises it.
+where `want[i]` is +1 for an input that must raise the response and −1 for one
+that must lower it. Each hidden unit either pushes the input's effect the
+required way, or opposes it twice and so still does.
 
 ### 1.2 What the study found
 
@@ -132,8 +140,22 @@ which is the dominant signal):
 | predict the mean | −0.000 | −0.067 |
 | depth-1 XGBoost, the notebook's model | +0.212 | +0.456 |
 | unconstrained MLP 6-8-1 | +0.258 | +0.474 |
-| **monotone by construction** | **+0.258** | +0.415 |
-| **cost of the safety property** | **−0.000** | −0.059 |
+| monotone: carbs ↑ | +0.258 | +0.415 |
+| **monotone: carbs ↑ *and* fibre ↓** | **+0.261** | — |
+| **cost of both guarantees** | **+0.003** | — |
+
+The unconstrained fit violates *both* conditions — 4 hidden units disagree on
+carbohydrate and 3 on fibre, 7 unit/input pairs in total — so neither property
+would hold without the constrained objective.
+
+Adding the second guarantee is free. The +0.003 is **within noise and should not
+be read as an improvement**; the defensible claim is that two safety guarantees
+cost nothing measurable, not that constraining helps.
+
+Fibre's direction is empirically supported but weakly: marginal r −0.051,
+partial β −0.025, and within every carbohydrate tertile the higher-fibre half
+has the lower iAUC (−111, −1951, −683 mg/dL·min). It is a domain-knowledge
+constraint the data is consistent with, not one the data establishes on its own.
 
 **On the scope Proof actually targets, monotonicity is free.** The constrained
 network matches the unconstrained one to three decimal places and sits slightly
@@ -171,8 +193,18 @@ takes three values, so a monotonicity sweep there would be nearly vacuous.
 
 `test_trained_network_on_silicon` takes the trained weights, quantises them
 through `golden_float.to_chip_streams`, drives the resulting bytes into the
-DUT, and checks across 12 carbohydrate levels that the hardware is bit-exact
-against the integer reference **and** that the reported response never falls.
+DUT, and sweeps **every constrained input in its own direction**, checking at
+each point that the hardware is bit-exact against the integer reference *and*
+that the response moves the required way:
+
+| input | levels | direction | observed output range |
+|---|---|---|---|
+| carbohydrate | 12 | non-decreasing | 1377 … 4346 (spread 2969) |
+| fibre | 16 | non-increasing | 2526 … 3210 (spread 684) |
+
+The spreads matter. **A direction that holds because nothing moved proves very
+little**, so the test reports the observed range and warns explicitly if a sweep
+comes out flat. Neither of these does.
 
 It **skips in CI**, because the weights are derived from a CC BY-NC-SA dataset
 and are deliberately not committed. A green CI run does not exercise it.

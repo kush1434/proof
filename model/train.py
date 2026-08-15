@@ -51,7 +51,17 @@ from cgmacros_loader import FEATURES, load_all
 
 DEFAULT_ROOT = r"C:\Users\kushk\Downloads\Claude\cgmacros\csv"
 CARB = FEATURES.index("carbs")
+FIBER = FEATURES.index("fiber")
 N_HIDDEN = 8
+
+# Directions the chip may be asked to guarantee: carbohydrate rising must never
+# lower the response, fibre rising must never raise it. The fibre direction is
+# empirically supported but weakly -- marginal r -0.051, partial beta -0.025,
+# and within every carbohydrate tertile the high-fibre half has the lower iAUC.
+CONSTRAINT_SETS = [
+    ({CARB: +1}, "carbs up"),
+    ({CARB: +1, FIBER: -1}, "carbs up + fibre down"),
+]
 
 
 def build(root, meal_type):
@@ -119,21 +129,40 @@ def weights_of(m):
     return W1, b1, W2, b2
 
 
-def sign_report(W1, W2, c=CARB):
-    """Does the trained network admit the monotonicity proof?"""
+def check_constraints(W1, W2, constraints):
+    """Which constrained inputs fail the sign condition, and on which units."""
     row = W2[0]
-    bad = [j for j in range(len(W1)) if W1[j][c] * row[j] < 0]
+    out = {}
+    for i, want in sorted(constraints.items()):
+        bad = [j for j in range(len(W1)) if W1[j][i] * row[j] * want < 0]
+        out[i] = bad
+    return out
+
+
+def sign_report(W1, W2, constraints=None):
+    """Does the trained network admit the monotonicity proof?"""
+    if constraints is None:
+        constraints = {CARB: +1}
+    fails = check_constraints(W1, W2, constraints)
+    row = W2[0]
     print(f"    hidden units          : {len(W1)}")
-    print(f"    W1[:,carb] signs      : "
-          f"{''.join('+' if W1[j][c] >= 0 else '-' for j in range(len(W1)))}")
     print(f"    W2[0] signs           : "
-          f"{''.join('+' if row[j] >= 0 else '-' for j in range(len(W1)))}")
-    if bad:
-        print(f"    SIGN CONDITION FAILS  : units {bad} disagree")
+          f"{''.join('+' if v >= 0 else '-' for v in row)}")
+    for i, bad in fails.items():
+        arrow = "increasing" if constraints[i] > 0 else "decreasing"
+        name = FEATURES[i]
+        print(f"    W1[:,{name}] signs{' ' * max(0, 8 - len(name))}: "
+              f"{''.join('+' if W1[j][i] >= 0 else '-' for j in range(len(W1)))}"
+              f"   (want {arrow})")
+        if bad:
+            print(f"      FAILS on units {bad}")
+    total_bad = sum(len(b) for b in fails.values())
+    if total_bad:
+        print(f"    SIGN CONDITION FAILS  : {total_bad} unit/input pair(s) disagree")
         print("      -> monotonicity is false by construction for these weights.")
     else:
         print("    SIGN CONDITION HOLDS  : monotonicity provable for these weights")
-    return bad
+    return [j for b in fails.values() for j in b]
 
 
 def project_signs(m, c=CARB):
@@ -165,40 +194,55 @@ def _sigmoid(v):
     return 1.0 / (1.0 + np.exp(-v))
 
 
-def train_monotone(Xtr, ytr, seed=0, iters=6000, lr=0.02, c=CARB, dirs=None):
-    """Train a network that satisfies the sign condition BY CONSTRUCTION.
+def train_monotone(Xtr, ytr, seed=0, iters=6000, lr=0.02, constraints=None,
+                   dirs=None):
+    """Train a network satisfying monotonicity constraints BY CONSTRUCTION.
+
+    `constraints` maps a feature index to a required direction:
+    `+1` = the response must never DECREASE as that input rises,
+    `-1` = it must never INCREASE. Defaults to carbohydrate increasing.
 
     Zeroing offending weights after the fact (project_signs) measures only an
-    upper bound on the cost, because it damages a network that was optimised
-    without the constraint. The honest number comes from optimising *within*
-    the constrained family.
+    upper bound on the cost, because it damages a network optimised without the
+    constraint. The honest number comes from optimising *within* the
+    constrained family.
 
     The constraint is imposed by reparameterisation rather than by a penalty,
-    so it holds exactly at every step and cannot be traded away:
+    so it holds exactly at every step and cannot be traded away. With a shared
+    per-unit direction d[j] in {+1, -1} and a per-input sign s[i]:
 
-        W1[j][carb] = d[j] * softplus(A[j][carb])
-        W2[0][j]    = d[j] * softplus(c[j])
+        W1[j][i] = s[i] * d[j] * softplus(A[j][i])     for constrained i
+        W2[0][j] =        d[j] * softplus(c[j])
 
-    for a fixed per-unit direction d[j] in {+1, -1}. The product is then
-    d[j]**2 * softplus * softplus >= 0 for EITHER direction, which is precisely
-    the sign condition -- a unit is allowed to oppose carbohydrate twice and
-    still raise the response.
+    so W1[j][i] * W2[j] = s[i] * d[j]**2 * softplus * softplus, whose sign is
+    exactly s[i] for every unit, which is the condition. Sharing one d[j]
+    across all constrained inputs is what lets several constraints hold at once
+    without fighting: a unit may oppose an input twice and still respect it.
+
+    Unconstrained inputs keep full freedom of sign, so the network can still
+    represent whatever it likes for those.
 
     Forcing every d[j] = +1 would also satisfy the condition but is strictly
-    stronger than necessary, and it over-penalises any network whose second
-    layer is mostly negative. `dirs` therefore defaults to the sign structure
-    the UNCONSTRAINED model chose, so the constrained family is centred on the
-    solution rather than on an arbitrary half of the space. Nothing else is constrained -- the other five inputs keep full
-    freedom of sign, so the network can still represent fibre lowering the
-    response, and so on.
+    stronger than necessary and over-penalises a network whose second layer is
+    mostly negative -- an early version did that and reported a cost three to
+    four times too large. `dirs` therefore defaults to the sign structure the
+    UNCONSTRAINED model chose, centring the constrained family on the solution
+    rather than on an arbitrary half of the space.
 
     Plain numpy with hand-derived gradients: the model is small, and a
     dependency on a training framework is not worth adding for one measurement.
     """
+    if constraints is None:
+        constraints = {CARB: +1}
     rng = np.random.RandomState(seed)
     n, d = Xtr.shape
+
     dvec = np.ones(N_HIDDEN) if dirs is None else np.sign(np.asarray(dirs, float))
     dvec[dvec == 0] = 1.0
+
+    idx = sorted(constraints)
+    sgn = np.array([constraints[i] for i in idx], float)
+
     A = rng.randn(N_HIDDEN, d) * 0.3
     b1 = np.zeros(N_HIDDEN)
     cc = rng.randn(N_HIDDEN) * 0.3
@@ -209,27 +253,30 @@ def train_monotone(Xtr, ytr, seed=0, iters=6000, lr=0.02, c=CARB, dirs=None):
     vs = [np.zeros_like(p) for p in params]
     b1a, b2a, eps = 0.9, 0.999, 1e-8
 
-    for step in range(1, iters + 1):
+    def forward(A, cc):
         W1 = A.copy()
-        W1[:, c] = dvec * _softplus(A[:, c])
-        W2 = dvec * _softplus(cc)
+        for k, i in enumerate(idx):
+            W1[:, i] = sgn[k] * dvec * _softplus(A[:, i])
+        return W1, dvec * _softplus(cc)
 
-        z = Xtr @ W1.T + b1           # (n, H)
+    for step in range(1, iters + 1):
+        W1, W2 = forward(A, cc)
+
+        z = Xtr @ W1.T + b1
         h = np.maximum(z, 0.0)
         yhat = h @ W2 + b2[0]
 
-        err = yhat - ytr
-        dy = 2.0 * err / n
+        dy = 2.0 * (yhat - ytr) / n
 
         gW2 = h.T @ dy
         gcc = gW2 * dvec * _sigmoid(cc)
         gb2 = np.array([dy.sum()])
 
-        dh = np.outer(dy, W2)
-        dz = dh * (z > 0)
+        dz = np.outer(dy, W2) * (z > 0)
         gW1 = dz.T @ Xtr
         gA = gW1.copy()
-        gA[:, c] = gW1[:, c] * dvec * _sigmoid(A[:, c])
+        for k, i in enumerate(idx):
+            gA[:, i] = gW1[:, i] * sgn[k] * dvec * _sigmoid(A[:, i])
         gb1 = dz.sum(0)
 
         for p, g, m, v in zip(params, [gA, gb1, gcc, gb2], ms, vs):
@@ -237,13 +284,9 @@ def train_monotone(Xtr, ytr, seed=0, iters=6000, lr=0.02, c=CARB, dirs=None):
             m += (1 - b1a) * g
             v *= b2a
             v += (1 - b2a) * (g * g)
-            mh = m / (1 - b1a ** step)
-            vh = v / (1 - b2a ** step)
-            p -= lr * mh / (np.sqrt(vh) + eps)
+            p -= lr * (m / (1 - b1a ** step)) / (np.sqrt(v / (1 - b2a ** step)) + eps)
 
-    W1 = A.copy()
-    W1[:, c] = dvec * _softplus(A[:, c])
-    W2 = dvec * _softplus(cc)
+    W1, W2 = forward(A, cc)
     return W1, b1, W2, b2
 
 
@@ -283,7 +326,7 @@ def main():
 
         print("\n  [monotonicity feasibility -- the question that matters]")
         W1, b1, W2, b2 = weights_of(best)
-        bad = sign_report(W1, W2)
+        bad = sign_report(W1, W2, {CARB: +1, FIBER: -1})
 
         if bad:
             proj = project_signs(best)
@@ -291,26 +334,35 @@ def main():
             print(f"      -> upper bound on the cost only: it damages a network"
                   f" optimised without the constraint")
 
-        print("\n  [constrained retrain -- monotone by construction]")
-        # Centre the constrained family on the unconstrained solution's
-        # sign structure instead of assuming every unit points the same way.
+        print()
+        print("  [constrained retrains -- monotone by construction]")
+        # Centre each constrained family on the unconstrained solution's own
+        # sign structure rather than assuming every unit points the same way.
         dirs = [1.0 if v >= 0 else -1.0 for v in W2[0]]
-        mb, mr2 = None, -9e9
-        for s in range(args.seeds):
-            w = train_monotone(Xtr, ytr_s, seed=s, dirs=dirs)
-            r2 = r2_score(yte_s, monotone_predict(Xte, *w))
-            if r2 > mr2:
-                mb, mr2 = w, r2
-        report(f"monotone MLP (best of {args.seeds})", yte_s,
-               monotone_predict(Xte, *mb), ys)
-        mW1, mb1, mW2, mb2 = mb
-        bad2 = sign_report(mW1.tolist(), [mW2.tolist()])
-        assert not bad2, "constrained model must satisfy the condition by construction"
-        print(f"    TRUE cost of monotonicity: R2 {best_r2:+.3f} -> {mr2:+.3f}"
-              f"  (delta {mr2 - best_r2:+.3f})")
-        if bad:
-            W1, b1 = mW1.tolist(), mb1.tolist()
-            W2, b2 = [mW2.tolist()], mb2.tolist()
+        chosen = None
+        for cons, clabel in CONSTRAINT_SETS:
+            mb, mr2 = None, -9e9
+            for s in range(args.seeds):
+                w = train_monotone(Xtr, ytr_s, seed=s, constraints=cons, dirs=dirs)
+                r2 = r2_score(yte_s, monotone_predict(Xte, *w))
+                if r2 > mr2:
+                    mb, mr2 = w, r2
+            report(clabel, yte_s, monotone_predict(Xte, *mb), ys)
+            print(f"      cost vs unconstrained: {mr2 - best_r2:+.3f}")
+            fails = check_constraints(mb[0].tolist(), [mb[2].tolist()], cons)
+            assert all(not v for v in fails.values()), (
+                "constrained model must satisfy its constraints by construction")
+            chosen = (mb, cons, clabel, mr2)
+
+        # Export the strongest set trained, so the weights shipped to the chip
+        # carry every guarantee rather than only the carbohydrate one.
+        (mW1, mb1, mW2, mb2), cons, clabel, mr2 = chosen
+        print()
+        print(f"  [exporting: {clabel}]")
+        sign_report(mW1.tolist(), [mW2.tolist()], cons)
+        W1, b1 = mW1.tolist(), mb1.tolist()
+        W2, b2 = [mW2.tolist()], mb2.tolist()
+        constraints_out = {FEATURES[i]: int(v) for i, v in cons.items()}
 
         if scope is None:
             out = {
@@ -324,10 +376,11 @@ def main():
                 # unconstrained model measured earlier. Those differ whenever a
                 # constrained retrain replaced them, and a metadata field that
                 # contradicts its own data is worse than no field.
+                "monotone_constraints": constraints_out,
                 "sign_condition_holds": all(
-                    W1[j][CARB] * W2[0][j] >= 0 for j in range(len(W1))
+                    not v for v in check_constraints(W1, W2, cons).values()
                 ),
-                "monotone_by_construction": bool(bad),
+                "monotone_by_construction": True,
             }
             with open(args.out, "w", encoding="utf-8") as f:
                 json.dump(out, f, indent=2)

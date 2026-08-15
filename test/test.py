@@ -759,16 +759,30 @@ async def test_trained_network_on_silicon(dut):
     W2, b2 = W["W2"], W["b2"]
     mu = W["standardise"]["mu"]
     sd = W["standardise"]["sd"]
-    carb = W["features"].index("carbs")
+    cons = W.get("monotone_constraints", {"carbs": 1})
 
     # A plausible meal, in real units, then standardised the way training was.
-    raw = [60.0, 4.0, 15.0, 20.0, 110.0, 8.5]
+    base = [60.0, 4.0, 15.0, 20.0, 110.0, 8.5]
 
+    for feat, want in sorted(cons.items()):
+        idx = W["features"].index(feat)
+        values = range(10, 121, 10) if feat == "carbs" else range(0, 31, 2)
+        await _sweep_one(dut, W, mu, sd, base, idx, feat, want, values)
+
+    cov.hit("monotonicity", "trained_weights")
+    if any(v < 0 for v in cons.values()):
+        cov.hit("monotonicity", "trained_weights_decreasing")
+
+
+async def _sweep_one(dut, W, mu, sd, base, idx, feat, want, values):
+    """Sweep one input and check bit-exactness plus the required direction."""
+    W1, b1, W2, b2 = W["W1"], W["b1"], W["W2"], W["b2"]
+    raw = list(base)
     prev = None
-    n_checked = 0
-    for grams in range(10, 121, 10):
-        raw[carb] = float(grams)
-        x = [(v - m) / s for v, m, s in zip(raw, mu, sd)]
+    seen = []
+    for v in values:
+        raw[idx] = float(v)
+        x = [(a - m) / s for a, m, s in zip(raw, mu, sd)]
 
         l1, l2, meta = gf.to_chip_streams(W1, b1, W2, b2, x, kx=5, kw1=6, kw2=6,
                                           s1=6, s2=0)
@@ -776,27 +790,35 @@ async def test_trained_network_on_silicon(dut):
         exp = gold.mode_b(l1, l2, meta["s1"], meta["s2"])
 
         # (1) bit-exact against the reference at every point
-        for j, (got, want) in enumerate(zip(h_read, exp["h"])):
-            assert got == (want, 0), f"carbs={grams} h[{j}]={got} != ({want}, 0)"
-        assert y_read[0] == gold.wide_bytes(exp["y"][0]), f"carbs={grams} y mismatch"
+        for j, (g, wnt) in enumerate(zip(h_read, exp["h"])):
+            assert g == (wnt, 0), f"{feat}={v} h[{j}]={g} != ({wnt}, 0)"
+        assert y_read[0] == gold.wide_bytes(exp["y"][0]), f"{feat}={v} y mismatch"
 
         # (2) the safety property, on trained weights
-        lo, hi = y_read[0]
-        y = (hi << 8) | lo
+        blo, bhi = y_read[0]
+        y = (bhi << 8) | blo
         y = y - 0x10000 if y & 0x8000 else y
         if prev is not None:
-            assert y >= prev, (
-                f"REPORTED RESPONSE FELL on trained weights: carbs "
-                f"{grams - 10} -> {grams} g gave y {prev} -> {y}"
-            )
+            if want > 0:
+                assert y >= prev, (
+                    f"REPORTED RESPONSE FELL as {feat} rose: {y} < {prev}")
+            else:
+                assert y <= prev, (
+                    f"REPORTED RESPONSE ROSE as {feat} rose: {y} > {prev}")
         prev = y
-        n_checked += 1
+        seen.append(y)
 
-    assert n_checked == 12
-    cov.hit("monotonicity", "trained_weights")
+    direction = "non-decreasing" if want > 0 else "non-increasing"
+    spread = max(seen) - min(seen)
     dut._log.info(
-        f"trained network: {n_checked} carbohydrate levels, bit-exact and monotone"
-    )
+        f"  {feat:8s} {len(seen)} levels, {direction}, "
+        f"observed range {min(seen)}..{max(seen)} (spread {spread})")
+    # A guarantee that holds because nothing moved proves very little. Report
+    # it rather than let a flat sweep masquerade as a verified property.
+    if spread == 0:
+        dut._log.warning(
+            f"  {feat}: output did not move across the sweep -- the direction "
+            f"holds trivially here, so it is not evidence of much")
 
 
 @cocotb.test()
@@ -860,6 +882,8 @@ async def test_zzz_coverage_report(dut):
     """
     hit, total, misses = cov.report(log=dut._log.info)
     if not HAVE_WEIGHTS:
-        misses = [m for m in misses if m != "monotonicity.trained_weights"]
-        dut._log.info("  (monotonicity.trained_weights exempt: weights not present)")
+        exempt = {"monotonicity.trained_weights",
+                  "monotonicity.trained_weights_decreasing"}
+        misses = [m for m in misses if m not in exempt]
+        dut._log.info("  (trained-weight bins exempt: weights not present)")
     assert not misses, f"uncovered bins: {misses}"

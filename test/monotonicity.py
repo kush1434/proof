@@ -130,11 +130,16 @@ def sweep_mode_b(W1, x, W2_row, s1, s2, c=CARB, lo=-128, hi=127):
     return out
 
 
-def violations(trace, which):
-    """Indices where the sequence decreases. `which` is 1 (internal) or 2 (reported)."""
+def violations(trace, which, direction=+1):
+    """Points where the sequence moves the wrong way.
+
+    `which` is 1 (internal) or 2 (reported); `direction` is +1 if the value
+    must never decrease as the input rises, -1 if it must never increase.
+    """
     bad = []
     for a, b in zip(trace, trace[1:]):
-        if b[which] < a[which]:
+        moved = b[which] - a[which]
+        if moved * direction < 0:
             bad.append((a[0], a[which], b[0], b[which]))
     return bad
 
@@ -226,6 +231,25 @@ def main():
         l1b = [list(zip(r, [xb if i == CARB else v for i, v in enumerate(x)])) for r in W1]
         print(f"      internal y {internal_y(l1a, [W2_row], s1, s2)} -> "
               f"{internal_y(l1b, [W2_row], s1, s2)}   (increased, as it should)")
+    print()
+    print("[4] The argument is direction-agnostic: a DECREASING input.")
+    print("    (fibre must never raise the response, so the required sign flips)")
+    FIB = 1
+    # sign condition for a decreasing input: W1[j][fibre] * W2[j] <= 0
+    W1 = [[10] * 6 for _ in range(gold.N_HIDDEN)]
+    for j in range(gold.N_HIDDEN):
+        W1[j][FIB] = -20
+    W2_row = [10] * gold.N_HIDDEN + [0, 0]
+    tr = sweep_mode_b(W1, [0] * 6, W2_row, 0, 0, c=FIB)
+    v = violations(tr, 1, direction=-1)
+    print(f"    satisfied  : internal violations {len(v)}")
+
+    W1[0][FIB] = +20  # one unit now agrees in sign, which breaks it
+    tr = sweep_mode_b(W1, [0] * 6, W2_row, 0, 0, c=FIB)
+    v = violations(tr, 1, direction=-1)
+    print(f"    violated   : internal violations {len(v)}"
+          + (f"   first: x {v[0][0]}->{v[0][2]} gives y {v[0][1]}->{v[0][3]}"
+             if v else "   <-- expected some!"))
     print("=" * 70)
 
 
