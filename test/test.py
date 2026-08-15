@@ -25,6 +25,7 @@ from cocotb.triggers import ClockCycles, Timer
 
 import golden_float as gf
 import golden_quant as gold
+from coverage import cov
 
 # uio_in -- host to chip
 VALID = 1 << 0
@@ -146,6 +147,7 @@ async def check_stream(dut, pairs, shift):
     assert (lo, hi) == (elo, ehi), f"result {lo:#04x},{hi:#04x} != {elo:#04x},{ehi:#04x}  [{ctx}]"
     got_sat = bool(flags(dut) & SAT)
     assert got_sat == exp["saturated"], f"saturated {got_sat} != {exp['saturated']}  [{ctx}]"
+    cov.sample_mode_a(pairs, shift, exp)
     return exp
 
 
@@ -326,6 +328,7 @@ async def test_sticky_coefficient(dut):
     exp = gold.mode_a([(5, 3), (5, 4)], 0)
     assert (lo, hi) == gold.result_bytes(exp)
     assert exp["acc"] == 35
+    cov.hit("protocol", "sticky_coefficient")
 
 
 @cocotb.test()
@@ -341,6 +344,7 @@ async def test_bytes_offered_while_busy_are_ignored(dut):
     await ClockCycles(dut.clk, 1)
     await settle()
     assert flags(dut) & BUSY, "should be busy immediately after taking the activation"
+    cov.hit("protocol", "bytes_while_busy")
     for _ in range(6):
         dut.ui_in.value = 0x7F
         dut.uio_in.value = VALID | IS_WEIGHT
@@ -384,6 +388,7 @@ async def test_busy_covers_the_whole_retire(dut):
         f = flags(dut)
         if not f & BUSY:
             assert f & DONE, "busy dropped while the result was still forming"
+            cov.hit("protocol", "busy_done_handoff")
             return
         await ClockCycles(dut.clk, 1)
         await settle()
@@ -396,6 +401,7 @@ async def test_activation_before_shift_is_ignored(dut):
     dropped rather than accumulated, and must not wedge the FSM."""
     await setup(dut)
     await send(dut, 99)  # activation with no stream open
+    cov.hit("protocol", "activation_before_shift")
     await send(dut, 99)
     assert not flags(dut) & (BUSY | DONE)
     await check_stream(dut, [(3, 3)], shift=0)  # still works
@@ -410,6 +416,7 @@ async def test_truncated_stream_then_reset(dut):
     await send(dut, 34)  # no LAST -- stream abandoned here
     await wait_not_busy(dut)
     assert not flags(dut) & DONE, "done must not assert without LAST"
+    cov.hit("protocol", "truncated_stream")
 
     await reset(dut)
     assert flags(dut) & (DONE | SAT | BUSY) == 0
@@ -427,6 +434,7 @@ async def test_reset_mid_multiply(dut):
     await ClockCycles(dut.clk, 1)
     dut.uio_in.value = 0
     await ClockCycles(dut.clk, 3)  # interrupt part-way through the multiply
+    cov.hit("protocol", "reset_mid_multiply")
 
     await reset(dut)
     lo, hi = await read_result(dut)
@@ -513,6 +521,7 @@ async def check_mode_b(dut, l1, l2, s1, s2):
         )
     got_sat = bool(flags(dut) & SAT)
     assert got_sat == exp["saturated"], f"saturated {got_sat} != {exp['saturated']}"
+    cov.sample_mode_b(l1, l2, s1, s2, exp)
     return exp
 
 
@@ -618,6 +627,7 @@ async def test_mode_b_sticky_flag_spans_neurons(dut):
     exp = await check_mode_b(dut, l1, W2, s1=0, s2=0)
     assert exp["saturated"]
     assert flags(dut) & SAT, "overflow from hidden neuron 0 was lost"
+    cov.hit("protocol", "sticky_across_neurons")
 
 
 @cocotb.test()
@@ -631,6 +641,33 @@ async def test_mode_b_new_inference_clears_flag(dut):
     clean = [[(1, 1)] for _ in range(gold.N_HIDDEN)]
     await check_mode_b(dut, clean, W2, s1=0, s2=0)
     assert not flags(dut) & SAT, "a new inference must clear the sticky flag"
+    cov.hit("protocol", "new_inference_flag")
+
+
+@cocotb.test()
+async def test_mode_b_output_field_saturates_both_ways(dut):
+    """The 16-bit output field must clamp, not wrap, at both rails.
+
+    This is R-4 in test form. The high rail was previously reached only
+    incidentally inside the monotonicity sweep, and the low rail was not
+    reached at all -- the coverage model is what made that visible, since both
+    bins read MISS while every other bin was hit.
+
+    Wrapping here is what broke the safety property: the internal value keeps
+    rising while the reported one flips sign.
+    """
+    await setup(dut)
+    # Drive every hidden unit to its ceiling, so h = 127 across the board.
+    l1 = [[(127, 127)] for _ in range(gold.N_HIDDEN)]
+
+    hi = await check_mode_b(dut, l1, [[127] * gold.N_HIDDEN + [0, 0]], s1=0, s2=0)
+    assert hi["h"] == [127] * gold.N_HIDDEN
+    assert hi["y"][0] == 8 * 127 * 127, hi["y"]
+    assert hi["y"][0] > 32767, "did not exceed the field, so it proves nothing"
+
+    lo = await check_mode_b(dut, l1, [[-128] * gold.N_HIDDEN + [0, 0]], s1=0, s2=0)
+    assert lo["y"][0] == 8 * -128 * 127, lo["y"]
+    assert lo["y"][0] < -32768, "did not undercut the field, so it proves nothing"
 
 
 @cocotb.test()
@@ -690,6 +727,7 @@ async def test_monotonic_in_carbohydrate(dut):
         prev_y, prev_h = y, h0
 
     assert saw_clamp, "sweep never reached the field limit -- it proves nothing"
+    cov.hit("monotonicity", "synthetic_weights")
 
 
 @cocotb.test(skip=not HAVE_WEIGHTS)
@@ -755,6 +793,7 @@ async def test_trained_network_on_silicon(dut):
         n_checked += 1
 
     assert n_checked == 12
+    cov.hit("monotonicity", "trained_weights")
     dut._log.info(
         f"trained network: {n_checked} carbohydrate levels, bit-exact and monotone"
     )
@@ -801,3 +840,26 @@ async def test_mode_b_reset_mid_inference(dut):
     await reset(dut)
     assert flags(dut) & (DONE | SAT | BUSY) == 0
     await check_mode_b(dut, l1_from(W1, x), W2, s1=0, s2=0)
+
+
+# ============================================================ COVERAGE =====
+
+
+@cocotb.test()
+async def test_zzz_coverage_report(dut):
+    """Report named-bin coverage. Defined last so it runs last.
+
+    This asserts full coverage rather than merely printing it. A coverage model
+    nobody fails on is decoration -- the point is that adding a bin without
+    stimulus to reach it breaks the build, which forces the gap to be either
+    covered or explicitly removed with a reason.
+
+    `test_trained_network_on_silicon` is skipped when the CGMacros-derived
+    weights are absent, so its bin is exempted in that case rather than
+    silently lowering the bar.
+    """
+    hit, total, misses = cov.report(log=dut._log.info)
+    if not HAVE_WEIGHTS:
+        misses = [m for m in misses if m != "monotonicity.trained_weights"]
+        dut._log.info("  (monotonicity.trained_weights exempt: weights not present)")
+    assert not misses, f"uncovered bins: {misses}"

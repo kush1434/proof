@@ -10,7 +10,7 @@ Python 3.8 (`.venv-legacy`, CGMacros baseline only).
 
 ```bash
 cd test
-python run.py                    # whole design, RTL      (33 tests)
+python run.py                    # whole design, RTL      (36 tests)
 python run.py --unit mac_serial  # submodule unit test    (6 tests)
 python run.py --gates            # post-layout netlist (needs PDK_ROOT)
 ./mutate.sh                      # mutation testing       (24 mutants)
@@ -61,7 +61,7 @@ about whether the thing could be made. That is now covered by `./lint.sh` as a
 pre-push gate rather than by waiting for CI.
 
 As of 2026-08-14 **both modes are complete**: `mac_serial`, `accumulator`,
-`proof_core` and the pin wrapper. It passes 33 top-level tests and 6 unit tests, every
+`proof_core` and the pin wrapper. It passes 36 top-level tests and 6 unit tests, every
 functional one compared **bit-exactly** against `test/golden_quant.py`.
 
 `mac_serial` is additionally verified **exhaustively** — all 65,536 signed 8×8
@@ -201,5 +201,7 @@ Recorded so nobody reads "all tests passed" as "everything is verified."
 - **Host-side quantisation.** The chip trusts the shift byte and the INT8
   scaling the host chose. Nothing on-chip validates that a shift is sensible,
   and a shift ≥ 24 simply replicates the sign bit. Well-defined, untested.
-- **Coverage model.** No named-bin coverage model exists yet; the mutation
-  score is currently carrying the whole argument.
+- **Coverage is functional, not structural.** 48 named bins, all hit, but
+  there is no line, toggle or FSM-state coverage from the simulator -- Icarus
+  does not produce it. A bin model only covers situations someone thought to
+  name.

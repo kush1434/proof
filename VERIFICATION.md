@@ -7,7 +7,7 @@ verified is listed as not verified, rather than left unmentioned.
 
 ```bash
 cd test
-python run.py                    # whole design, RTL        (34 tests)
+python run.py                    # whole design, RTL        (36 tests)
 python run.py --unit mac_serial  # multiplier, exhaustive   (6 tests)
 python run.py --gates            # post-layout netlist      (needs PDK_ROOT)
 python monotonicity.py           # the safety property study
@@ -185,7 +185,7 @@ and are deliberately not committed. A green CI run does not exercise it.
 exactly**, and every functional test compares against it rather than against
 hand-computed expected values.
 
-- 34 top-level tests, both modes, all bit-exact.
+- 36 top-level tests, both modes, all bit-exact.
 - Semantics are chosen so the two cannot drift: Python's `>>` on a negative int
   floors, which is precisely what Verilog's `>>>` does on a signed value, so
   requantisation is bit-exact with no correction on either side. Saturation is
@@ -251,7 +251,45 @@ Three mutants that escaped and what closing them taught:
 
 ---
 
-## 5. Physical signoff
+## 5. Functional coverage
+
+`test/coverage.py` defines **48 named bins across 14 groups**, and the suite
+hits **48/48**. `test_zzz_coverage_report` *asserts* full coverage rather than
+merely printing it: adding a bin without stimulus to reach it breaks the build,
+which forces the gap to be either covered or removed with a stated reason.
+
+Coverage and the mutation score answer different questions and neither
+substitutes for the other:
+
+| | question |
+|---|---|
+| mutation score | if the design were wrong, would the testbench notice? |
+| coverage | did the stimulus ever reach this situation at all? |
+
+A mutant can only be caught in a situation the stimulus visits, so a high
+mutation score with unexamined coverage may only mean the mutants happened to
+live where the tests already were.
+
+**Bins are derived from the reference model, not asserted by hand.** A test
+that *believes* it saturated the accumulator but did not cannot tick that bin.
+Only genuinely unobservable events — protocol abuse, reset timing — are hit
+explicitly, and those two groups are labelled `(explicit)` in the report so the
+distinction stays visible.
+
+It earned its place immediately. On the first run it reported 46/48 with
+`mode_b_field.clamp_high` and `mode_b_field.clamp_low` missing — the output
+fields whose truncation was R-4. The high rail was reached only incidentally
+inside the monotonicity sweep, which reads the DUT directly and so never
+sampled, and the low rail was not reached by anything. Both now have a directed
+test.
+
+Also exempted honestly: when the CGMacros-derived weights are absent,
+`monotonicity.trained_weights` is excluded rather than silently lowering the
+bar, and the report says so.
+
+---
+
+## 6. Physical signoff
 
 From the LibreLane run, both modes:
 
@@ -276,7 +314,7 @@ figures above, not on simulation.
 
 ---
 
-## 6. Areas deliberately not covered
+## 7. Areas deliberately not covered
 
 The full list lives in `BUGS.md`. The ones that matter most:
 
@@ -284,17 +322,15 @@ The full list lives in `BUGS.md`. The ones that matter most:
   derived weights are gitignored rather than shipped in an Apache-2.0 repo.
   `test_trained_network_on_silicon` therefore **skips in CI** and only runs
   locally after `model/train.py`. A green CI run does not exercise it.
-- **No named-bin coverage model.** The mutation score is currently carrying the
-  entire "is the testbench any good" argument on its own.
 - **Only `DW = 8` and `N_HIDDEN = 8` are simulated.** Both are parameters.
 - **Host-side quantisation is trusted.** Nothing on chip validates that a shift
   is sensible; a shift ≥ 24 simply replicates the sign bit — well-defined,
   untested.
-- **No timing verification beyond STA.** See §5.
+- **No timing verification beyond STA.** See §6.
 
 ---
 
-## 7. Not a medical device
+## 8. Not a medical device
 
 Every output is an estimate. Nothing here is a diagnostic, treatment or dosing
 claim, and no part of this design should be used to make one.
