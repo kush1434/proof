@@ -165,9 +165,28 @@ def mode_b(l1_neurons, l2_neurons, s1, s2):
     return {"h": h, "y": y, "saturated": saturated}
 
 
+def sat_field(v, bits):
+    """Clamp to a signed field of `bits` width, then take its bit pattern.
+
+    The output fields SATURATE rather than truncate. This is not cosmetic: the
+    pipeline is provably monotone in carbohydrate internally, but the host only
+    ever sees a fixed-width field, and truncation wraps. A sweep found the
+    reported response falling 31,293 -> -31,209 for a one-count rise in
+    carbohydrate while the true value rose. Clamping is monotone; truncation is
+    not. See test/monotonicity.py and BUGS.md R-4.
+    """
+    hi = (1 << (bits - 1)) - 1
+    lo = -(1 << (bits - 1))
+    if v > hi:
+        v = hi
+    elif v < lo:
+        v = lo
+    return v & ((1 << bits) - 1)
+
+
 def wide_bytes(v):
     """Mode B readback: rd_sel = 0 -> low byte, rd_sel = 1 -> high byte."""
-    m = v & 0xFFFF
+    m = sat_field(v, 16)
     return m & 0xFF, (m >> 8) & 0xFF
 
 
@@ -183,7 +202,7 @@ def result_bytes(res):
       rd_sel = 0 -> gl[7:0]
       rd_sel = 1 -> {cat[1:0], gl[13:8]}
     """
-    gl_masked = res["gl"] & ((1 << GL_W) - 1)
-    lo = gl_masked & 0xFF
-    hi = ((res["cat"] & 0x3) << 6) | ((gl_masked >> 8) & 0x3F)
+    gl_field = sat_field(res["gl"], GL_W)
+    lo = gl_field & 0xFF
+    hi = ((res["cat"] & 0x3) << 6) | ((gl_field >> 8) & 0x3F)
     return lo, hi

@@ -10,10 +10,10 @@ Python 3.8 (`.venv-legacy`, CGMacros baseline only).
 
 ```bash
 cd test
-python run.py                    # whole design, RTL      (32 tests)
+python run.py                    # whole design, RTL      (33 tests)
 python run.py --unit mac_serial  # submodule unit test    (6 tests)
 python run.py --gates            # post-layout netlist (needs PDK_ROOT)
-./mutate.sh                      # mutation testing       (22 mutants)
+./mutate.sh                      # mutation testing       (24 mutants)
 ./lint.sh                        # local pre-push synthesis gate
 ```
 
@@ -27,7 +27,22 @@ python run.py --gates            # post-layout netlist (needs PDK_ROOT)
 | R-2 | 2026-08-14 | Verilator `WIDTHEXPAND` warning at `mac_serial.v:57` — surfaced in the Action summary | CI Verilator lint (`LINTER_INCLUDE_PDK_MODELS: 1`) | `step == DW - 1` compares a `CW+1` bit register against a 32-bit integer expression | Introduced `localparam [CW:0] LAST_STEP = DW - 1` and compared against that. That traded the warning for `WIDTHTRUNC` on the initialiser, so the final form tests the low `CW` bits against all-ones, which is sized exactly on both sides |
 | R-3 | 2026-08-14 | Mode B: every hidden activation read back **correct**, but `hreg` was permanently zero, so all three outputs were wrong. 5 of 31 tests failed — and only the ones with asymmetric stimulus | `test_mode_b_h_order_is_preserved` (written specifically to be asymmetric), confirmed by probing `hreg` directly | The neuron was retired in `S_ACC`, the same cycle the accumulator's own `add_en` is high. So `acc` still held the value from **before the final term**, and the value pushed into `h` was one term short. `h` *read back* correctly because that path is combinational off `acc` and is sampled later, after the accumulator has settled — the readback and the stored copy disagreed | Added `S_FIN`, the cycle after `S_ACC`, where `acc` is final. All retire actions (requantise, ReLU, push to `h`, advance the neuron counter, raise `done`) moved there |
 
-**R-3 is the one to remember.** Every test that passed had a final term of
+| R-4 | 2026-08-14 | The **safety property failed**: with a weight set satisfying the sign condition, increasing carbohydrate by one count made the *reported* response fall 31,293 → −31,209, while the true internal value correctly rose 31,293 → 34,327. 55 of 400 randomised weight sets showed it | `test/monotonicity.py`, a property study over the reference model | The pipeline is provably monotone internally — saturating sums, arithmetic shifts, ReLU and clamps are each monotone. But the host never reads the internal value; it reads a fixed-width field, and the output fields **truncated**. Truncation wraps, and wrapping is not monotone. The accumulator saturated correctly all along; the bug was one level further out, at the boundary between the datapath and the pins | Both output fields now saturate: Mode A clamps to signed 14 bits, Mode B to signed 16. Clamping is monotone, so the property now survives to what the host actually sees. Study reports 0/400. Added `test_monotonic_in_carbohydrate`, which sweeps the RTL across the field limit, and mutants M23/M24 |
+
+**R-4 is the project's actual thesis, and it was found by asking a question
+rather than by running a test.** No stimulus-driven test was going to surface
+it: every individual result was bit-exact against the reference model, because
+the reference model truncated too. Both were wrong in the same way, so
+comparing them proved only that they agreed. It took stating the property in
+its own terms — *does this ever go down when it should go up?* — and checking
+that instead.
+
+It is also a reminder that saturation is not only about producing a sensible
+number. **A saturating sum is monotone and a wrapping one is not**, so §4.7's
+requirement was load-bearing for the safety argument in a way that was not
+obvious when it was written.
+
+**R-3 is the one to remember for a different reason.** Every test that passed had a final term of
 zero — `[[1,0,0,0,0,0]]` style weight rows — which makes “accumulator before
 the last term” and “accumulator after the last term” identical. Four tests
 agreed the design was correct and were all structurally blind to it in the same
@@ -48,7 +63,7 @@ about whether the thing could be made. That is now covered by `./lint.sh` as a
 pre-push gate rather than by waiting for CI.
 
 As of 2026-08-14 **both modes are complete**: `mac_serial`, `accumulator`,
-`proof_core` and the pin wrapper. It passes 32 top-level tests and 6 unit tests, every
+`proof_core` and the pin wrapper. It passes 33 top-level tests and 6 unit tests, every
 functional one compared **bit-exactly** against `test/golden_quant.py`.
 
 `mac_serial` is additionally verified **exhaustively** — all 65,536 signed 8×8
@@ -86,7 +101,7 @@ testing is what tells them apart.**
 `./mutate.sh` — each mutant injected alone, relevant suites run, RTL restored
 afterwards and on interrupt via an EXIT trap.
 
-**22 considered, 21 caught, 1 equivalent, 0 escaped, 0 invalid, 0 compile-fail.**
+**24 considered, 23 caught, 1 equivalent, 0 escaped, 0 invalid, 0 compile-fail.**
 
 Three properties of the harness itself, each of which had to be true before any
 `CAUGHT` above means anything:
@@ -129,6 +144,8 @@ Three properties of the harness itself, each of which had to be true before any
 | M20 | `proof_core` | first bias constant 127 → 126 | **CAUGHT** |
 | M21 | `proof_core` | LAST on the shift byte ignored, inference never restarts | **CAUGHT** |
 | M22 | `proof_core` | hidden results reported as raw output, not as h | **CAUGHT** |
+| M23 | `proof_core` | Mode B output field truncates, breaking monotonicity (R-4) | **CAUGHT** |
+| M24 | `proof_core` | Mode A output field truncates instead of saturating | **CAUGHT** |
 
 ### An equivalent mutant, and the design observation from it
 

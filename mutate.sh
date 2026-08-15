@@ -308,6 +308,18 @@ run_mutant M22 proof_core.v "top" catch \
   "proof_core: hidden results reported as raw output, not as h" \
   -e 's|res_is_h <= mode_r && !layer2;|res_is_h <= 1'"'"'b0;|'
 
+# --- the monotonicity property --------------------------------------------
+# These two are the safety property in mutant form. Truncating the output
+# field instead of saturating it is exactly the defect R-4 fixed: the internal
+# value keeps rising while the reported one wraps negative.
+run_mutant M23 proof_core.v "top" catch \
+  "proof_core: Mode B output field truncates instead of saturating (breaks monotonicity)" \
+  -e 's|(gl_full >  32767) ? 16'"'"'h7FFF :|(1'"'"'b0) ? 16'"'"'h7FFF :|'
+
+run_mutant M24 proof_core.v "top" catch \
+  "proof_core: Mode A output field truncates instead of saturating" \
+  -e 's|(gl_full >  8191) ? 14'"'"'h1FFF :|(1'"'"'b0) ? 14'"'"'h1FFF :|'
+
 # ---------------------------------------------------------------------------
 restore_all
 rm -f "$LOG"

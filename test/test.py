@@ -626,6 +626,65 @@ async def test_mode_b_new_inference_clears_flag(dut):
 
 
 @cocotb.test()
+async def test_monotonic_in_carbohydrate(dut):
+    """THE HEADLINE PROPERTY, checked on the RTL rather than on the model.
+
+    Holding every other input fixed, increasing carbohydrate must never
+    decrease the predicted response.
+
+    Internally the pipeline is monotone by construction: saturating sums,
+    arithmetic shifts, ReLU and clamps are each non-decreasing, so their
+    composition is too, provided every hidden unit satisfies the sign
+    condition W1[j][c] * W2[j] >= 0. This weight set satisfies it trivially --
+    both are positive.
+
+    The window is chosen to straddle the point where the response leaves the
+    16-bit output field. That is where it used to break: the internal value
+    kept rising while the reported value wrapped negative, because the field
+    truncated instead of saturating (BUGS.md R-4). Sweeping somewhere
+    comfortable would prove nothing -- the property only ever failed at the
+    boundary, which is exactly the M9 lesson about directed stimulus.
+    """
+    await setup(dut)
+    W1 = [[127, 0, 0, 0, 0, 0] for _ in range(gold.N_HIDDEN)]
+    W2 = [[127] * gold.N_HIDDEN + [0, 0]]
+    s1, s2 = 7, 0
+
+    prev_y = None
+    prev_h = None
+    saw_clamp = False
+    for xc in range(25, 51):
+        x = [xc, 0, 0, 0, 0, 0]
+        l1 = [list(zip(row, x)) for row in W1]
+
+        h_read, y_read = await run_mode_b(dut, l1, W2, s1, s2)
+        exp = gold.mode_b(l1, W2, s1, s2)
+
+        # Still bit-exact against the reference at every point of the sweep.
+        for j, (got, want) in enumerate(zip(h_read, exp["h"])):
+            assert got == (want, 0), f"x_c={xc} h[{j}]={got} != ({want}, 0)"
+        assert y_read[0] == gold.wide_bytes(exp["y"][0]), f"x_c={xc} y mismatch"
+
+        lo, hi = y_read[0]
+        y = (hi << 8) | lo
+        y = y - 0x10000 if y & 0x8000 else y
+        h0 = h_read[0][0]
+
+        if prev_y is not None:
+            assert h0 >= prev_h, f"h fell at x_c={xc}: {prev_h} -> {h0}"
+            assert y >= prev_y, (
+                f"REPORTED RESPONSE FELL as carbohydrate rose: "
+                f"x_c {xc - 1} -> {xc} gave y {prev_y} -> {y} "
+                f"(true value {exp['y'][0]})"
+            )
+        if y == 32767:
+            saw_clamp = True
+        prev_y, prev_h = y, h0
+
+    assert saw_clamp, "sweep never reached the field limit -- it proves nothing"
+
+
+@cocotb.test()
 async def test_mode_b_randomised(dut):
     """Random two-layer inferences against the golden model."""
     await setup(dut)

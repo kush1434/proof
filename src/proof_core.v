@@ -180,7 +180,18 @@ module proof_core #(
   // Arithmetic shift, floor semantics -- exactly what Python's `>>` does on a
   // negative int, so the reference model is bit-exact with no correction.
   wire signed [ACC_W-1:0] gl_full = acc >>> shift;
-  wire [GL_W-1:0] gl = gl_full[GL_W-1:0];
+  // The output fields SATURATE. They used to truncate, and that broke the
+  // headline safety property: internally the response is provably monotone in
+  // carbohydrate -- saturating sums, shifts, ReLU and clamps are all monotone
+  // -- but the host does not read the internal value, it reads a fixed-width
+  // field. Truncation wraps, and wrapping is emphatically not monotone. A
+  // sweep found the reported response falling 31,293 -> -31,209 as carbohydrate
+  // rose by one count, while the true value rose 31,293 -> 34,327. Clamping is
+  // monotone, so saturating the field preserves the property end to end.
+  // See VERIFICATION.md and BUGS.md R-4.
+  wire [GL_W-1:0] gl = (gl_full >  8191) ? 14'h1FFF :  // +8191
+                       (gl_full < -8192) ? 14'h2000 :  // -8192
+                                           gl_full[GL_W-1:0];
 
   // Standard per-serving thresholds: low <= 10, medium 11-19, high >= 20.
   wire [1:0] cat = (gl_full >= 20) ? 2'd2 : (gl_full >= 11) ? 2'd1 : 2'd0;
@@ -190,7 +201,12 @@ module proof_core #(
                         (gl_full > 127) ? {{(DW-7){1'b0}}, 7'd127}
                                         : gl_full[DW-1:0];
 
-  wire [15:0] wide = res_is_h ? {8'd0, h_new} : gl_full[15:0];
+  // Same reasoning as `gl` above: saturate, never wrap.
+  wire [15:0] y_sat = (gl_full >  32767) ? 16'h7FFF :
+                      (gl_full < -32768) ? 16'h8000 :
+                                           gl_full[15:0];
+
+  wire [15:0] wide = res_is_h ? {8'd0, h_new} : y_sat;
 
   // ---------------------------------------------------------------- FSM ---
   always @(posedge clk or negedge rst_n) begin
