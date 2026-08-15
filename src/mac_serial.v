@@ -54,11 +54,18 @@ module mac_serial #(
   reg                 running;
   reg                 done_r;
 
-  // Sized explicitly: `step == DW - 1` compares a CW+1 bit reg against a
-  // 32-bit integer expression, which Verilator flags as WIDTHEXPAND.
-  localparam [CW:0] LAST_STEP = DW - 1;
-
-  wire last = (step == LAST_STEP);
+  // Last step detection, sized exactly so Verilator is happy on both counts.
+  //
+  // `step == DW - 1` compares a CW+1 bit register against a 32-bit integer
+  // expression (WIDTHEXPAND), and hoisting it into a `localparam [CW:0]`
+  // just moves the same mismatch to the initialiser (WIDTHTRUNC). Instead,
+  // test the low CW bits against all-ones: DW is a power of two, so
+  // DW-1 is exactly CW ones, and `step` only ever reaches DW, so the pattern
+  // is unambiguous. Both sides are CW bits wide and nothing is truncated.
+  //
+  // This is the one place the module assumes DW is a power of two. Only
+  // DW = 8 is verified; see BUGS.md.
+  wire last = (step[CW-1:0] == {CW{1'b1}});
 
   wire signed [DW:0] mcand_ext = {mcand[DW-1], mcand};
   wire signed [DW:0] addend    = last ? -mcand_ext : mcand_ext;

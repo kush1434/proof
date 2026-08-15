@@ -212,9 +212,13 @@ run_mutant M2 mac_serial.v "mac_serial top" equivalent \
   "mac_serial: high accumulator one bit narrower (known equivalent)" \
   -e 's|reg signed \[DW:0\]   acc_hi;|reg signed [DW-1:0]   acc_hi;|'
 
+# Retargeted 2026-08-14 when the last-step test was resized to clear a
+# Verilator warning. The old pattern stopped matching and was correctly
+# reported INVALID rather than scored as CAUGHT -- which is the entire point
+# of the did-not-apply guard. All-ones minus one fires one step early.
 run_mutant M3 mac_serial.v "mac_serial top" catch \
   "mac_serial: terminate one shift step early" \
-  -e 's|wire last = (step == DW - 1);|wire last = (step == DW - 2);|'
+  -e 's|wire last = (step\[CW-1:0\] == {CW{1'"'"'b1}});|wire last = (step[CW-1:0] == {{(CW-1){1'"'"'b1}}, 1'"'"'b0});|'
 
 # --- accumulator -----------------------------------------------------------
 run_mutant M4 accumulator.v "top" catch \
