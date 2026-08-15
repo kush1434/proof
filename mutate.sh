@@ -238,13 +238,19 @@ run_mutant M6 accumulator.v "top" catch \
   -e 's|wire ovf = (sum\[ACC_W\] != sum\[ACC_W-1\]);|wire ovf = 1'"'"'b0;|'
 
 run_mutant M7 accumulator.v "top" catch \
-  "accumulator: clear ignored, so state leaks between inferences" \
-  -e 's|    end else if (clear) begin|    end else if (1'"'"'b0) begin|'
+  "accumulator: clear ignored, so state leaks between neurons" \
+  -e 's|      if (clear) acc_r <= {ACC_W{1'"'"'b0}};|      if (1'"'"'b0) acc_r <= {ACC_W{1'"'"'b0}};|'
+
+# Mode B clears the accumulator per neuron but the sticky flag only per
+# inference. Tying them together loses every overflow before the last neuron.
+run_mutant M14 proof_core.v "top" catch \
+  "proof_core: sticky flag cleared per neuron instead of per inference" \
+  -e 's|.clear_sat(new_inf),|.clear_sat(start_neuron),|'
 
 # --- proof_core ------------------------------------------------------------
 run_mutant M8 proof_core.v "top" catch \
-  "proof_core: accumulator never cleared at the start of a stream" \
-  -e 's|wire clear_acc = (state == S_IDLE) && take_wt;|wire clear_acc = 1'"'"'b0;|'
+  "proof_core: accumulator never cleared at the start of a neuron" \
+  -e 's|wire start_neuron = (state == S_IDLE) && take_wt;|wire start_neuron = 1'"'"'b0;|'
 
 run_mutant M9 proof_core.v "top" catch \
   "proof_core: requantisation shift off by one" \
@@ -255,16 +261,52 @@ run_mutant M10 proof_core.v "top" catch \
   -e 's|(gl_full >= 20) ? 2.d2|(gl_full >= 21) ? 2'"'"'d2|'
 
 run_mutant M11 proof_core.v "top" catch \
-  "proof_core: LAST ignored, so every pair finishes the inference" \
-  -e 's|          if (last_r) begin|          if (1'"'"'b1) begin|'
+  "proof_core: LAST ignored, so every term finishes the neuron" \
+  -e 's|state <= last_r ? S_FIN : S_RUN;|state <= S_FIN;|'
 
 run_mutant M12 proof_core.v "top" catch \
-  "proof_core: busy drops during the accumulate cycle" \
-  -e 's#assign busy   = (state == S_MULT) || (state == S_ACC);#assign busy   = (state == S_MULT);#'
+  "proof_core: busy drops during the retire cycle" \
+  -e 's#assign busy   = (state == S_MULT) || (state == S_ACC) || (state == S_FIN);#assign busy   = (state == S_MULT) || (state == S_ACC);#'
 
 run_mutant M13 proof_core.v "top" catch \
   "proof_core: every byte treated as a weight, so nothing ever multiplies" \
   -e 's|wire take_wt  = take && is_weight;|wire take_wt  = take;|'
+
+# --- proof_core, Mode B ----------------------------------------------------
+# R-3 was exactly this class: retire one cycle early and h captures the
+# accumulator before its final term. Stimulus whose last term is zero cannot
+# see it, which is why several of these need asymmetric inputs.
+run_mutant M15 proof_core.v "top" catch \
+  "proof_core: h retired one cycle early, before the last term lands" \
+  -e 's|state <= last_r ? S_FIN : S_RUN;|state <= last_r ? S_IDLE : S_RUN;|'
+
+run_mutant M16 proof_core.v "top" catch \
+  "proof_core: h never rotates, so every layer-2 term reuses h[0]" \
+  -e 's|hreg <= {hreg\[H_W-DW-1:0\], hreg\[H_W-1:H_W-DW\]};|hreg <= hreg;|'
+
+run_mutant M17 proof_core.v "top" catch \
+  "proof_core: ReLU removed, negatives pass through" \
+  -e 's|wire \[DW-1:0\] h_new = (gl_full < 0)   ? {DW{1'"'"'b0}} :|wire [DW-1:0] h_new = (gl_full < 0)   ? gl_full[DW-1:0] :|'
+
+run_mutant M18 proof_core.v "top" catch \
+  "proof_core: h upper clamp removed, so 127 wraps" \
+  -e 's|(gl_full > 127) ? {{(DW-7){1'"'"'b0}}, 7'"'"'d127}|(gl_full > 127) ? gl_full[DW-1:0]|'
+
+run_mutant M19 proof_core.v "top" catch \
+  "proof_core: layer-2 boundary off by one" \
+  -e 's|wire layer2    = (neuron == N_HIDDEN\[NW-1:0\]);|wire layer2    = (neuron == N_HIDDEN[NW-1:0] - 1);|'
+
+run_mutant M20 proof_core.v "top" catch \
+  "proof_core: first bias constant 127 -> 126" \
+  -e 's|(hk == N_HIDDEN\[NW-1:0\]) ? {{(DW-7){1'"'"'b0}}, 7'"'"'d127} :|(hk == N_HIDDEN[NW-1:0]) ? {{(DW-7){1'"'"'b0}}, 7'"'"'d126} :|'
+
+run_mutant M21 proof_core.v "top" catch \
+  "proof_core: LAST on the shift byte ignored, inference never restarts" \
+  -e 's#wire new_inf      = start_neuron \&\& (!mode || last);#wire new_inf      = start_neuron;#'
+
+run_mutant M22 proof_core.v "top" catch \
+  "proof_core: hidden results reported as raw output, not as h" \
+  -e 's|res_is_h <= mode_r && !layer2;|res_is_h <= 1'"'"'b0;|'
 
 # ---------------------------------------------------------------------------
 restore_all

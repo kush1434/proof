@@ -42,7 +42,8 @@ module accumulator #(
 ) (
     input  wire                     clk,
     input  wire                     rst_n,
-    input  wire                     clear,      // synchronous: zero acc and flag
+    input  wire                     clear,      // synchronous: zero the accumulator
+    input  wire                     clear_sat,  // synchronous: zero the sticky flag
     input  wire                     add_en,     // accumulate `term` this cycle
     input  wire signed [TERM_W-1:0] term,
     output wire signed [ACC_W-1:0]  acc,
@@ -63,16 +64,22 @@ module accumulator #(
   wire signed [ACC_W-1:0] sum_sat =
       ovf ? {sum[ACC_W], {(ACC_W - 1) {~sum[ACC_W]}}} : sum[ACC_W-1:0];
 
+  // `clear` and `clear_sat` are SEPARATE on purpose. Mode B clears the
+  // accumulator between the neurons of one inference but must keep the sticky
+  // flag across all of them -- an overflow in hidden neuron 0 has to still be
+  // visible when the final output is read. Clearing both together would make
+  // the flag report only the last neuron, silently losing every earlier
+  // overflow. Mode A drives both at once, so its behaviour is unchanged.
   always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       acc_r <= {ACC_W{1'b0}};
       sat_r <= 1'b0;
-    end else if (clear) begin
-      acc_r <= {ACC_W{1'b0}};
-      sat_r <= 1'b0;
-    end else if (add_en) begin
-      acc_r <= sum_sat;
-      sat_r <= sat_r | ovf;
+    end else begin
+      if (clear) acc_r <= {ACC_W{1'b0}};
+      else if (add_en) acc_r <= sum_sat;
+
+      if (clear_sat) sat_r <= 1'b0;
+      else if (add_en) sat_r <= sat_r | ovf;
     end
   end
 

@@ -79,11 +79,16 @@ async def wait_not_busy(dut, limit=200):
     raise AssertionError("busy never cleared")
 
 
-async def send(dut, byte, is_weight=False, last=False):
+async def send(dut, byte, is_weight=False, last=False, mode=False):
     """Present one byte, respecting the busy handshake."""
     await wait_not_busy(dut)
     dut.ui_in.value = byte & 0xFF
-    dut.uio_in.value = VALID | (IS_WEIGHT if is_weight else 0) | (LAST if last else 0)
+    dut.uio_in.value = (
+        VALID
+        | (IS_WEIGHT if is_weight else 0)
+        | (LAST if last else 0)
+        | (MODE if mode else 0)
+    )
     await ClockCycles(dut.clk, 1)
     dut.uio_in.value = 0
     dut.ui_in.value = 0
@@ -343,6 +348,41 @@ async def test_bytes_offered_while_busy_are_ignored(dut):
 
 
 @cocotb.test()
+async def test_busy_covers_the_whole_retire(dut):
+    """`busy` must not drop before the result is valid.
+
+    The contract is "do not present a byte while busy", so the converse has to
+    hold: any cycle busy is low, a byte will be accepted. After the final term
+    there is a multiply, an accumulate and a retire cycle. If busy clears
+    before the retire finishes, the host sees a legal window, sends into it,
+    and the byte lands in a state that ignores it -- silently desynchronising
+    the stream one byte for the rest of the inference.
+
+    Found by mutation testing: M12 escaped until this test existed, because
+    every other test waits for `done` rather than for `busy`, and so never
+    looks at the handoff between them.
+    """
+    await setup(dut)
+    await send(dut, 0, is_weight=True)
+    await send(dut, 6, is_weight=True)
+    dut.ui_in.value = 7
+    dut.uio_in.value = VALID | LAST
+    await ClockCycles(dut.clk, 1)
+    dut.uio_in.value = 0
+    dut.ui_in.value = 0
+    await settle()
+
+    for _ in range(60):
+        f = flags(dut)
+        if not f & BUSY:
+            assert f & DONE, "busy dropped while the result was still forming"
+            return
+        await ClockCycles(dut.clk, 1)
+        await settle()
+    raise AssertionError("busy never cleared")
+
+
+@cocotb.test()
 async def test_activation_before_shift_is_ignored(dut):
     """A stream that opens with an activation is a protocol error. It must be
     dropped rather than accumulated, and must not wedge the FSM."""
@@ -406,3 +446,223 @@ async def test_zero_cases(dut):
     await check_stream(dut, [(0, 0)], shift=0)
     await check_stream(dut, [(0, 127)], shift=0)
     await check_stream(dut, [(127, 0)], shift=3)
+
+
+# ============================================================== MODE B =====
+#
+# Every neuron is a Mode A dot product. A hidden neuron takes its activations
+# from the host and pushes its ReLU'd result into h; an output neuron takes
+# its activations from the chip (h, then the constants 127 and 1) and is read
+# back directly.
+
+
+async def run_l1_neuron(dut, pairs, s1, first=False):
+    """One hidden neuron. LAST on the shift byte marks a new inference."""
+    await send(dut, s1, is_weight=True, mode=True, last=first)
+    for i, (w, x) in enumerate(pairs):
+        await send(dut, w, is_weight=True, mode=True)
+        await send(dut, x, last=(i == len(pairs) - 1), mode=True)
+    await wait_done(dut)
+
+
+async def run_l2_neuron(dut, weights, s2):
+    """One output neuron: weight bytes only, activations supplied by the chip."""
+    await send(dut, s2, is_weight=True, mode=True)
+    for i, w in enumerate(weights):
+        await send(dut, w, is_weight=True, last=(i == len(weights) - 1), mode=True)
+    await wait_done(dut)
+
+
+async def run_mode_b(dut, l1, l2, s1, s2):
+    """Drive a whole two-layer inference, reading every intermediate."""
+    h_read = []
+    for j, pairs in enumerate(l1):
+        await run_l1_neuron(dut, pairs, s1, first=(j == 0))
+        h_read.append(await read_result(dut))
+    y_read = []
+    for weights in l2:
+        await run_l2_neuron(dut, weights, s2)
+        y_read.append(await read_result(dut))
+    return h_read, y_read
+
+
+async def check_mode_b(dut, l1, l2, s1, s2):
+    """Run an inference and check every hidden activation and output.
+
+    Checking h as well as y is deliberate: the hidden layer is observable
+    because a hidden neuron presents its result exactly like an output neuron
+    does, so a wrong h is caught where it happens rather than being diluted
+    through layer 2.
+    """
+    h_read, y_read = await run_mode_b(dut, l1, l2, s1, s2)
+    exp = gold.mode_b(l1, l2, s1, s2)
+
+    for j, (got, want) in enumerate(zip(h_read, exp["h"])):
+        assert got == (want, 0), f"h[{j}] = {got}, expected ({want}, 0)"
+    for i, (got, want) in enumerate(zip(y_read, exp["y"])):
+        assert got == gold.wide_bytes(want), (
+            f"y[{i}] = {got}, expected {gold.wide_bytes(want)} (raw {want})"
+        )
+    got_sat = bool(flags(dut) & SAT)
+    assert got_sat == exp["saturated"], f"saturated {got_sat} != {exp['saturated']}"
+    return exp
+
+
+def l1_from(weights, x, bias_pairs=()):
+    """Build hidden-neuron streams: activations re-streamed per neuron."""
+    return [list(zip(row, x)) + list(bias_pairs) for row in weights]
+
+
+@cocotb.test()
+async def test_mode_b_smoke(dut):
+    """Smallest useful two-layer inference."""
+    await setup(dut)
+    x = [10, 20, 30, 40, 50, 60]
+    W1 = [[1, 0, 0, 0, 0, 0]] * gold.N_HIDDEN
+    W2 = [[1] * gold.N_HIDDEN + [0, 0]]
+    exp = await check_mode_b(dut, l1_from(W1, x), W2, s1=0, s2=0)
+    assert exp["h"] == [10] * 8, exp["h"]
+    assert exp["y"] == [80], exp["y"]
+
+
+@cocotb.test()
+async def test_mode_b_relu_clamps_negative(dut):
+    """A negative pre-activation must come out as exactly zero, not wrap."""
+    await setup(dut)
+    x = [100, 0, 0, 0, 0, 0]
+    W1 = [[-50, 0, 0, 0, 0, 0]] * gold.N_HIDDEN  # -5000 before ReLU
+    W2 = [[1] * gold.N_HIDDEN + [0, 0]]
+    exp = await check_mode_b(dut, l1_from(W1, x), W2, s1=2, s2=0)
+    assert exp["h"] == [0] * 8, exp["h"]
+    assert exp["y"] == [0], exp["y"]
+
+
+@cocotb.test()
+async def test_mode_b_h_clamps_at_127(dut):
+    """h is stored as INT8, so a large pre-activation saturates at 127."""
+    await setup(dut)
+    x = [127, 127, 127, 127, 127, 127]
+    W1 = [[127] * 6] * gold.N_HIDDEN  # 96,774 before the shift
+    W2 = [[0] * gold.N_HIDDEN + [0, 0]]
+    exp = await check_mode_b(dut, l1_from(W1, x), W2, s1=0, s2=0)
+    assert exp["h"] == [127] * 8, exp["h"]
+
+
+@cocotb.test()
+async def test_mode_b_bias_constants(dut):
+    """The chip supplies 127 then 1 after h, so a bias is exact to the unit.
+
+    Checked by driving every hidden weight to zero: y is then purely the bias,
+    and v8*127 + v9*1 must reproduce it exactly.
+    """
+    await setup(dut)
+    x = [0] * 6
+    W1 = [[0] * 6] * gold.N_HIDDEN
+    for target in (0, 1, -1, 127, -128, 5000, -5000, 8128):
+        v8 = max(-128, min(127, round(target / 127)))
+        v9 = target - 127 * v8
+        if not -128 <= v9 <= 127:
+            continue
+        W2 = [[0] * gold.N_HIDDEN + [v8, v9]]
+        exp = await check_mode_b(dut, l1_from(W1, x), W2, s1=0, s2=0)
+        assert exp["y"] == [target], f"bias {target} -> {exp['y']}"
+
+
+@cocotb.test()
+async def test_mode_b_h_order_is_preserved(dut):
+    """h[k] must line up with the k'th layer-2 weight.
+
+    Asymmetric by construction: each hidden neuron gets a distinct value and
+    each output weight is a distinct power of two, so any rotation or
+    transposition of h changes y. The M2 lesson from the CNN accelerator --
+    symmetric stimulus cannot see a transposed index.
+    """
+    await setup(dut)
+    l1 = [[(j + 1, 1)] for j in range(gold.N_HIDDEN)]  # h[j] = j + 1
+    W2 = [[1, 2, 4, 8, 16, 32, 64, 127] + [0, 0]]
+    exp = await check_mode_b(dut, l1, W2, s1=0, s2=0)
+    assert exp["h"] == [1, 2, 3, 4, 5, 6, 7, 8], exp["h"]
+    assert exp["y"] == [1 + 4 + 12 + 32 + 80 + 192 + 448 + 1016], exp["y"]
+
+
+@cocotb.test()
+async def test_mode_b_h_survives_multiple_output_neurons(dut):
+    """h rotates a full turn per output neuron, so all three see the same h."""
+    await setup(dut)
+    l1 = [[(j + 1, 1)] for j in range(gold.N_HIDDEN)]
+    W2 = [[1] * gold.N_HIDDEN + [0, 0]] * 3  # identical -> identical outputs
+    exp = await check_mode_b(dut, l1, W2, s1=0, s2=0)
+    assert exp["y"] == [36, 36, 36], exp["y"]
+
+
+@cocotb.test()
+async def test_mode_b_sticky_flag_spans_neurons(dut):
+    """An overflow in hidden neuron 0 must still be visible at the output.
+
+    This is why the accumulator has separate `clear` and `clear_sat`. The
+    accumulator is cleared for every neuron; clearing the flag with it would
+    report only the last neuron and silently lose every earlier overflow.
+    """
+    await setup(dut)
+    # Neuron 0 saturates; every later neuron is small and cannot overflow.
+    l1 = [[(-128, -128)] * 520] + [[(1, 1)] for _ in range(gold.N_HIDDEN - 1)]
+    W2 = [[1] * gold.N_HIDDEN + [0, 0]]
+    exp = await check_mode_b(dut, l1, W2, s1=0, s2=0)
+    assert exp["saturated"]
+    assert flags(dut) & SAT, "overflow from hidden neuron 0 was lost"
+
+
+@cocotb.test()
+async def test_mode_b_new_inference_clears_flag(dut):
+    """LAST on the opening shift byte starts a fresh inference."""
+    await setup(dut)
+    l1 = [[(-128, -128)] * 520] + [[(1, 1)] for _ in range(gold.N_HIDDEN - 1)]
+    W2 = [[1] * gold.N_HIDDEN + [0, 0]]
+    await check_mode_b(dut, l1, W2, s1=0, s2=0)
+    assert flags(dut) & SAT
+    clean = [[(1, 1)] for _ in range(gold.N_HIDDEN)]
+    await check_mode_b(dut, clean, W2, s1=0, s2=0)
+    assert not flags(dut) & SAT, "a new inference must clear the sticky flag"
+
+
+@cocotb.test()
+async def test_mode_b_randomised(dut):
+    """Random two-layer inferences against the golden model."""
+    await setup(dut)
+    rng = random.Random(SEED ^ 0xB)
+    for _ in range(6):
+        x = [rng.randint(-128, 127) for _ in range(6)]
+        W1 = [[rng.randint(-128, 127) for _ in range(6)] for _ in range(gold.N_HIDDEN)]
+        W2 = [
+            [rng.randint(-128, 127) for _ in range(gold.N_HIDDEN + 2)]
+            for _ in range(3)
+        ]
+        await check_mode_b(dut, l1_from(W1, x), W2, s1=rng.randint(0, 8),
+                           s2=rng.randint(0, 8))
+
+
+@cocotb.test()
+async def test_mode_switching_between_inferences(dut):
+    """A -> B -> A with no reset. Mode A must be unaffected by Mode B state."""
+    await setup(dut)
+    await check_stream(dut, [(50, 40), (25, 60), (10, 30)], shift=4)
+    x = [10, 20, 30, 40, 50, 60]
+    W1 = [[1, 0, 0, 0, 0, 0]] * gold.N_HIDDEN
+    W2 = [[1] * gold.N_HIDDEN + [0, 0]]
+    await check_mode_b(dut, l1_from(W1, x), W2, s1=0, s2=0)
+    exp = await check_stream(dut, [(50, 40), (25, 60), (10, 30)], shift=4)
+    assert exp["acc"] == 3800 and exp["gl"] == 237, "Mode A perturbed by Mode B"
+
+
+@cocotb.test()
+async def test_mode_b_reset_mid_inference(dut):
+    """Reset partway through layer 1, then a clean inference."""
+    await setup(dut)
+    x = [10, 20, 30, 40, 50, 60]
+    W1 = [[1, 0, 0, 0, 0, 0]] * gold.N_HIDDEN
+    W2 = [[1] * gold.N_HIDDEN + [0, 0]]
+    for j in range(3):
+        await run_l1_neuron(dut, list(zip(W1[j], x)), s1=0, first=(j == 0))
+    await reset(dut)
+    assert flags(dut) & (DONE | SAT | BUSY) == 0
+    await check_mode_b(dut, l1_from(W1, x), W2, s1=0, s2=0)

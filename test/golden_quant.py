@@ -84,6 +84,93 @@ def mode_a(pairs, shift):
     }
 
 
+# --- Mode B ---------------------------------------------------------------
+# Two-layer quantised MLP over the same datapath:
+#
+#   h = ReLU( (W1 . x + b1) >> s1 )      clamped to 0..127
+#   y =       (W2 . h + b2) >> s2
+#
+# Every neuron of both layers is a Mode A dot product. The difference is only
+# where the activations come from and what happens to the result:
+#
+#   layer 1  activations supplied by the host, re-streamed per neuron
+#            result requantised by s1, ReLU-clamped, pushed into h
+#   layer 2  activations supplied by the chip from h
+#            result requantised by s2 and read out
+#
+# `x` is deliberately NOT buffered on chip. The host re-streams it for each
+# hidden neuron, which costs 48 bytes instead of 6 and saves 48 flip-flops.
+# Bandwidth is free at meal timescales; flip-flops are 48.99 um2 each.
+#
+# Biases are not a special case anywhere. In layer 1 the host just sends extra
+# (weight, activation) pairs. In layer 2 the chip supplies two constants after
+# the eight h values -- 127 then 1 -- so a bias is w8*127 + w9*1, exact to the
+# unit for any 15-bit value. That is zero extra RTL for full-precision biases.
+
+N_HIDDEN = 8
+H_MIN = 0
+H_MAX = 127
+
+L2_CONST = (127, 1)  # activations the chip supplies at k = N_HIDDEN, N_HIDDEN+1
+
+
+def relu_clamp(v):
+    """ReLU and clamp to the INT8 range h is stored in."""
+    if v < H_MIN:
+        return H_MIN
+    if v > H_MAX:
+        return H_MAX
+    return v
+
+
+def layer2_activation(h, k):
+    """Activation the chip supplies for index k of a layer-2 neuron."""
+    if k < N_HIDDEN:
+        return h[k]
+    return L2_CONST[k - N_HIDDEN]
+
+
+def dot(pairs):
+    """Saturating dot product. Returns (acc, saturated)."""
+    acc = 0
+    saturated = False
+    for w, a in pairs:
+        acc, ovf = sat_add(acc, w * a)
+        saturated = saturated or ovf
+    return acc, saturated
+
+
+def mode_b(l1_neurons, l2_neurons, s1, s2):
+    """Two-layer inference.
+
+    l1_neurons: N_HIDDEN lists of (w, x) pairs -- activations from the host
+    l2_neurons: lists of weights only          -- activations from the chip
+
+    The sticky overflow flag spans the whole inference, not one neuron.
+    """
+    saturated = False
+
+    h = []
+    for pairs in l1_neurons:
+        acc, ovf = dot(pairs)
+        saturated = saturated or ovf
+        h.append(relu_clamp(requantize(acc, s1)))
+
+    y = []
+    for weights in l2_neurons:
+        acc, ovf = dot([(w, layer2_activation(h, k)) for k, w in enumerate(weights)])
+        saturated = saturated or ovf
+        y.append(requantize(acc, s2))
+
+    return {"h": h, "y": y, "saturated": saturated}
+
+
+def wide_bytes(v):
+    """Mode B readback: rd_sel = 0 -> low byte, rd_sel = 1 -> high byte."""
+    m = v & 0xFFFF
+    return m & 0xFF, (m >> 8) & 0xFF
+
+
 def result_bytes(res):
     """The two bytes the host reads back via RD_SEL.
 

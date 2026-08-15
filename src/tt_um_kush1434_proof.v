@@ -29,6 +29,7 @@ module tt_um_kush1434_proof (
   wire valid     = uio_in[0];
   wire is_weight = uio_in[1];
   wire last      = uio_in[2];
+  wire mode      = uio_in[3];
   wire rd_sel    = uio_in[4];
 
   wire [7:0] result;
@@ -42,6 +43,7 @@ module tt_um_kush1434_proof (
       .valid    (valid),
       .is_weight(is_weight),
       .last     (last),
+      .mode     (mode),
       .data     (ui_in),
       .rd_sel   (rd_sel),
       .result   (result),
@@ -54,7 +56,6 @@ module tt_um_kush1434_proof (
   assign uio_out = {busy, saturated, done, 5'b00000};
   assign uio_oe  = 8'b1110_0000;  // [7:5] out, [4:0] in
 
-  // uio_in[3] is MODE, reserved for Mode B and not yet implemented.
-  wire _unused = &{ena, uio_in[7:5], uio_in[3], 1'b0};
+  wire _unused = &{ena, uio_in[7:5], 1'b0};
 
 endmodule
