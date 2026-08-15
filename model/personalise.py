@@ -94,6 +94,7 @@ def main():
             for k in K_VALUES:
                 if len(ts) - k < MIN_EVAL:
                     continue
+                acc[k].setdefault("per_subject", [])
                 # Personalise on the first k meals; score on everything after.
                 offset = 0.0 if k == 0 else float((ts[:k] - base_pred[:k]).mean())
                 t_eval = ts[k:]
@@ -102,6 +103,13 @@ def main():
                 acc[k]["t"].append(t_eval * ys + ym)
                 acc[k]["p"].append(p_eval * ys + ym)
                 acc[k]["subjects"] += 1
+                # Per-subject MAE delta, so the gain can carry a confidence
+                # interval instead of resting on one pooled number. Paired by
+                # construction: same person, same meals, same population model.
+                acc[k]["per_subject"].append(
+                    (int(pid),
+                     mean_absolute_error(t_eval, base_pred[k:]) * ys,
+                     mean_absolute_error(t_eval, p_eval) * ys))
                 if k > 0:
                     mae_pop = mean_absolute_error(t_eval, base_pred[k:])
                     mae_per = mean_absolute_error(t_eval, p_eval)
@@ -129,6 +137,20 @@ def main():
         delta = "" if base_mae is None or k == 0 else f"  ({mae - base_mae:+.0f})"
         print(f"  {k:8d} {d['subjects']:9d} {r2_score(t, p):+8.3f} "
               f"{mae:9.0f}{delta:>9s} {frac:>15s}")
+    print()
+    print("  paired per-subject MAE change (population -> personalised),")
+    print("  95 % CI across participants:")
+    for k in K_VALUES:
+        d = acc[k]
+        if k == 0 or not d.get("per_subject"):
+            continue
+        dd = np.array([per - pop for _, pop, per in d["per_subject"]])
+        se = dd.std(ddof=1) / np.sqrt(len(dd))
+        lo, hi = dd.mean() - 1.96 * se, dd.mean() + 1.96 * se
+        verdict = ("helps" if hi < 0 else
+                   "HARMS" if lo > 0 else "not established")
+        print(f"    k={k:2d}  delta MAE {dd.mean():+7.0f}  "
+              f"[95% CI {lo:+7.0f}, {hi:+7.0f}]   {verdict}")
     print()
     print("  k = 0 is the population model with no personalisation at all.")
     print("=" * 74)

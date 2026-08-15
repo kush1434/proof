@@ -27,6 +27,19 @@ order**; sampling someone's future to predict their past would inflate this.
 | 12 | +0.303 | 1652 (−209) | 30/40 |
 | 16 | +0.306 | 1566 (−294) | 27/38 |
 
+**Paired per-subject MAE change, 95 % CI across participants** — the gain does
+not rest on a pooled point estimate:
+
+| k | Δ MAE | 95 % CI | verdict |
+|---|---|---|---|
+| 1 | **+354** | [+77, +631] | **significantly HARMS** |
+| 2 | +158 | [−71, +387] | not established |
+| 3 | +58 | [−130, +247] | not established |
+| 5 | −77 | [−228, +74] | not established |
+| **8** | **−150** | **[−285, −16]** | **significantly helps** |
+| 12 | −188 | [−336, −40] | helps |
+| 16 | −248 | [−402, −94] | helps |
+
 Three things worth saying:
 
 - **One meal is worse than none.** Calibrating on a single noisy observation
@@ -36,6 +49,28 @@ Three things worth saying:
   tested here.
 - This is what justifies streaming weights rather than storing them. The
   architecture was chosen for area; the data says it was worth having.
+
+### 1.1 A hole this opens in the safety argument
+
+The monotonicity guarantee is a property **of the weights**, and the chip
+cannot check the weights it is handed. Personalisation means a different weight
+set per patient, streamed by an untrusted host — so the question is whether a
+realistic per-person fit still satisfies the sign condition.
+
+**It never does.** Fine-tuning an unconstrained network on each held-out
+participant's own meals and checking the result:
+
+| | |
+|---|---|
+| per-person weight sets checked | 44 |
+| sets violating the sign condition | **44 (100 %)** |
+| offending hidden units per bad set | median **3 of 8** |
+
+The chip accepts every one of them without complaint, and the guarantee is
+silently void for all of them. Enforcing monotonicity therefore cannot be left
+to whoever trains the model: either the host is trusted to use a constrained
+objective, or **the chip must verify its own precondition.** It currently does
+neither. See `RESULTS.md` §9.
 
 ---
 
@@ -210,7 +245,28 @@ three cases where the environment reported a false pass.
 
 ---
 
-## 8. Claims to avoid
+## 8. Open design question: an on-chip monotonicity guard
+
+The sign condition is checkable **from the weight stream itself**. The chip
+already sees `W1[j][carb]` (the first weight byte of hidden neuron `j`) and
+`W2[j]` (the `j`-th layer-2 weight byte). Storing 8 sign bits during layer 1
+and comparing them during layer 2 would let the device refuse — or at least
+flag — a weight set that cannot be monotone.
+
+Estimated cost: ~10 flip-flops plus a comparator, on top of 148 flops at
+76.35 % utilisation.
+
+The obstacle is pins, not logic: all 8 `uio` bits are allocated. The cheapest
+resolution is to widen `SATURATED` into a general "do not trust this output"
+fault, asserted on accumulator saturation **or** a sign-condition violation —
+both mean the same thing to a caller, and it costs no pin.
+
+Not implemented. It is an RTL change to a signed-off design, and that is a
+decision about risk near a deadline, not a technical question.
+
+---
+
+## 9. Claims to avoid
 
 - ❌ "We beat XGBoost." The interval straddles zero.
 - ❌ "Monotonicity is free." It costs −0.036 [−0.059, −0.012].
