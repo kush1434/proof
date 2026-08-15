@@ -22,3 +22,5 @@ test/*.fst
 test/unit_out.txt
 test/mut.txt
 test/mut_run.log
+test/weights.json
+model/weights.json

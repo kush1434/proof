@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: (c) 2026 Kush Shah
 # SPDX-License-Identifier: Apache-2.0
 """
-Top-level tests for Proof, Mode A.
+Top-level tests for Proof -- Mode A, Mode B, and the safety property.
 
 Every functional test compares the RTL against golden_quant.py **bit-exactly**.
-That is the stronger of the two obligations in the verification plan; the
-float model (not written yet) carries the weaker error-bound obligation and is
-kept separate on purpose, so the two are never conflated.
+That is the stronger of the two obligations in the verification plan;
+golden_float.py carries the weaker error-bound obligation and is kept separate
+on purpose, so the two are never conflated.
 
 cocotb 2.0 notes, both learned the hard way (BUGS.md TB-1, TB-2):
   - Tasks a test starts are cancelled when it ends, so the clock is restarted
@@ -15,6 +15,7 @@ cocotb 2.0 notes, both learned the hard way (BUGS.md TB-1, TB-2):
     sampled after settle().
 """
 
+import json
 import os
 import random
 
@@ -22,6 +23,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, Timer
 
+import golden_float as gf
 import golden_quant as gold
 
 # uio_in -- host to chip
@@ -41,6 +43,12 @@ CLK_NS = 10
 # Overridable so mutate.sh can sweep seeds and report how many of them catch
 # each mutant. On the CNN accelerator that number was the whole argument for
 # directed tests: M9 was caught by only 31 of 200 random seeds.
+# Trained weights are derived from CGMacros, which is CC BY-NC-SA. They are
+# deliberately NOT committed, so this test skips in CI rather than shipping a
+# derivative of a non-commercial dataset in an Apache-2.0 repository.
+WEIGHTS = os.path.join(os.path.dirname(__file__), "weights.json")
+HAVE_WEIGHTS = os.path.exists(WEIGHTS)
+
 SEED = int(os.environ.get("PROOF_SEED", "20260814"))
 N_RANDOM_STREAMS = int(os.environ.get("PROOF_STREAMS", "30"))
 
@@ -682,6 +690,74 @@ async def test_monotonic_in_carbohydrate(dut):
         prev_y, prev_h = y, h0
 
     assert saw_clamp, "sweep never reached the field limit -- it proves nothing"
+
+
+@cocotb.test(skip=not HAVE_WEIGHTS)
+async def test_trained_network_on_silicon(dut):
+    """End to end: a network trained on CGMacros, run on the actual RTL.
+
+    This is the join between the two halves of the project. `model/train.py`
+    fits a monotone-by-construction network to 1,346 real meals;
+    `golden_float.to_chip_streams` quantises it into the exact byte streams the
+    chip consumes; this drives those bytes through the RTL and checks two
+    things at once:
+
+      1. the hardware is bit-exact against the integer reference, and
+      2. the safety property survives on REAL trained weights -- not on the
+         synthetic weight sets used elsewhere in this file.
+
+    Skipped when model/weights.json is absent, so CI without the dataset still
+    passes rather than silently reporting a green run that tested nothing.
+    """
+    await setup(dut)
+    with open(WEIGHTS, encoding="utf-8") as f:
+        W = json.load(f)
+
+    assert W["sign_condition_holds"], (
+        "these weights cannot be monotone -- retrain with the constraint"
+    )
+
+    W1, b1 = W["W1"], W["b1"]
+    W2, b2 = W["W2"], W["b2"]
+    mu = W["standardise"]["mu"]
+    sd = W["standardise"]["sd"]
+    carb = W["features"].index("carbs")
+
+    # A plausible meal, in real units, then standardised the way training was.
+    raw = [60.0, 4.0, 15.0, 20.0, 110.0, 8.5]
+
+    prev = None
+    n_checked = 0
+    for grams in range(10, 121, 10):
+        raw[carb] = float(grams)
+        x = [(v - m) / s for v, m, s in zip(raw, mu, sd)]
+
+        l1, l2, meta = gf.to_chip_streams(W1, b1, W2, b2, x, kx=5, kw1=6, kw2=6,
+                                          s1=6, s2=0)
+        h_read, y_read = await run_mode_b(dut, l1, l2, meta["s1"], meta["s2"])
+        exp = gold.mode_b(l1, l2, meta["s1"], meta["s2"])
+
+        # (1) bit-exact against the reference at every point
+        for j, (got, want) in enumerate(zip(h_read, exp["h"])):
+            assert got == (want, 0), f"carbs={grams} h[{j}]={got} != ({want}, 0)"
+        assert y_read[0] == gold.wide_bytes(exp["y"][0]), f"carbs={grams} y mismatch"
+
+        # (2) the safety property, on trained weights
+        lo, hi = y_read[0]
+        y = (hi << 8) | lo
+        y = y - 0x10000 if y & 0x8000 else y
+        if prev is not None:
+            assert y >= prev, (
+                f"REPORTED RESPONSE FELL on trained weights: carbs "
+                f"{grams - 10} -> {grams} g gave y {prev} -> {y}"
+            )
+        prev = y
+        n_checked += 1
+
+    assert n_checked == 12
+    dut._log.info(
+        f"trained network: {n_checked} carbohydrate levels, bit-exact and monotone"
+    )
 
 
 @cocotb.test()

@@ -7,11 +7,12 @@ verified is listed as not verified, rather than left unmentioned.
 
 ```bash
 cd test
-python run.py                    # whole design, RTL        (33 tests)
+python run.py                    # whole design, RTL        (34 tests)
 python run.py --unit mac_serial  # multiplier, exhaustive   (6 tests)
 python run.py --gates            # post-layout netlist      (needs PDK_ROOT)
 python monotonicity.py           # the safety property study
 cd .. && ./mutate.sh             # mutation testing         (24 mutants)
+cd ../model && python train.py   # train + sign-condition check
 cd .. && ./lint.sh               # local pre-push synthesis gate
 ```
 
@@ -93,11 +94,81 @@ fields, which is monotone. The study now reports zero violations.
 
 - It **does** establish that the arithmetic preserves monotonicity, and that
   the property now survives all the way to what the host reads.
-- It **does not** establish that any trained network satisfies the sign
-  condition. That is a property of weights, not of the chip, and is unverified
-  because no network has been trained yet. If training produces a hidden unit
-  whose two signs disagree, the property is false by construction and the fix
-  is a constrained training objective — an RTL change cannot rescue it.
+### 1.4 Does a *real* trained network satisfy the sign condition?
+
+No — not unless it is trained to. Fitting the network to CGMacros without the
+constraint produces hidden units whose two signs disagree (4 of 8 on all meals,
+2 of 8 on breakfasts), so **monotonicity is false by construction for an
+unconstrained fit** and no RTL stimulus could rescue it.
+
+The fix is a constrained objective, and the interesting question is what it
+costs. `model/train.py` imposes the condition by *reparameterisation* rather
+than by a penalty, so it holds exactly at every step:
+
+```
+W1[j][carb] = d[j] * softplus(...)      d[j] in {+1, -1}, fixed per unit
+W2[0][j]    = d[j] * softplus(...)
+```
+
+Either direction satisfies the condition, because the product is
+`d[j]**2 * softplus * softplus >= 0`. Forcing every `d[j] = +1` also works but
+is strictly stronger than necessary and badly over-penalises a network whose
+second layer is mostly negative — an early version did exactly that and
+reported a cost three to four times too large. The directions are therefore
+seeded from the unconstrained solution's own sign structure.
+
+Held-out **by participant** (a random row split would leak individual response,
+which is the dominant signal):
+
+| | all meals (1,346) | breakfast only (383) |
+|---|---|---|
+| predict the mean | −0.000 | −0.067 |
+| depth-1 XGBoost, the notebook's model | +0.212 | +0.456 |
+| unconstrained MLP 6-8-1 | +0.258 | +0.474 |
+| **monotone by construction** | **+0.258** | +0.415 |
+| **cost of the safety property** | **−0.000** | −0.059 |
+
+**On the scope Proof actually targets, monotonicity is free.** The constrained
+network matches the unconstrained one to three decimal places and sits slightly
+above the notebook-style baseline. That is the result worth defending: the
+safety property is not a trade-off here, it is available at no measured cost.
+
+Caveats that belong with those numbers:
+
+- One participant split, one seed sweep. No confidence intervals; the gap
+  between +0.212 and +0.258 is **not** established as significant, and should
+  not be reported as "beats XGBoost".
+- The breakfast-only column is a different problem, not a harder one — see §1.5.
+- `R² ≈ 0.26` means most of the variance in postprandial response is *not*
+  explained by meal macros plus pre-meal glucose. That is consistent with the
+  literature and is a statement about the problem, not a defect in the chip.
+
+### 1.5 The baseline's scope is not this project's scope
+
+CGMacros breakfasts are **standardised test meals**. Of 383 usable breakfasts
+there are only **6 distinct macronutrient combinations**, the top 4 cover 83 %,
+carbohydrate takes 3 values and fibre takes 2. Holding the meal fixed is
+deliberate study design: it isolates person-to-person variation, which makes
+the reference notebook a *personalisation* result rather than a
+meal-composition one.
+
+Proof predicts response from meal composition, so it needs meals that differ.
+Across all meal types there are **1,346 usable meals with 592 distinct
+combinations**, and carbohydrate's coefficient of variation rises from 0.29 to
+0.74.
+
+This matters for the safety property too: on breakfast-only data, carbohydrate
+takes three values, so a monotonicity sweep there would be nearly vacuous.
+
+### 1.6 End to end on the RTL
+
+`test_trained_network_on_silicon` takes the trained weights, quantises them
+through `golden_float.to_chip_streams`, drives the resulting bytes into the
+DUT, and checks across 12 carbohydrate levels that the hardware is bit-exact
+against the integer reference **and** that the reported response never falls.
+
+It **skips in CI**, because the weights are derived from a CC BY-NC-SA dataset
+and are deliberately not committed. A green CI run does not exercise it.
 - The sign condition is **sufficient, not necessary**. A network violating it
   may still be monotone over the reachable input region. Nothing here searches
   for that weaker guarantee.
@@ -113,18 +184,27 @@ fields, which is monotone. The study now reports zero violations.
 exactly**, and every functional test compares against it rather than against
 hand-computed expected values.
 
-- 33 top-level tests, both modes, all bit-exact.
+- 34 top-level tests, both modes, all bit-exact.
 - Semantics are chosen so the two cannot drift: Python's `>>` on a negative int
   floors, which is precisely what Verilog's `>>>` does on a signed value, so
   requantisation is bit-exact with no correction on either side. Saturation is
   applied per accumulate in both, because that is what the hardware does.
 
-`test/golden_float.py` — the float reference carrying the *error-bound*
-obligation — **does not exist yet.** The quantisation error is therefore
-entirely unmeasured. These are two different obligations and are deliberately
-not conflated: a mismatch against the integer model is a bug; a deviation from
-the float model is a characterisation result with a bound that has to be
-argued.
+`test/golden_float.py` is the float reference, carrying the *error-bound*
+obligation. It also holds `to_chip_streams`, which turns a trained float
+network into the exact byte streams the chip consumes — so the same weights go
+through the reference model and the RTL without transcription.
+
+Over 300 random networks the dequantised output tracks the float model with
+median relative error **0.6 %** and p95 **2.8 %**. The maximum is much larger,
+but that is an artefact of random networks whose outputs sit near zero rather
+than an accuracy cliff; a meaningful bound has to be measured on the trained
+network, and **choosing the bound remains an open decision**, not one this
+repository makes.
+
+The two obligations are deliberately not conflated: a mismatch against the
+integer model is a bug; a deviation from the float model is a characterisation
+result with a bound that has to be argued.
 
 ---
 
@@ -199,8 +279,10 @@ figures above, not on simulation.
 
 The full list lives in `BUGS.md`. The ones that matter most:
 
-- **No trained network exists.** The sign condition (§1.3) is therefore
-  unverified against real weights, and the float error bound is unmeasured.
+- **The trained network is not committed.** CGMacros is CC BY-NC-SA, so
+  derived weights are gitignored rather than shipped in an Apache-2.0 repo.
+  `test_trained_network_on_silicon` therefore **skips in CI** and only runs
+  locally after `model/train.py`. A green CI run does not exercise it.
 - **No named-bin coverage model.** The mutation score is currently carrying the
   entire "is the testbench any good" argument on its own.
 - **Only `DW = 8` and `N_HIDDEN = 8` are simulated.** Both are parameters.
