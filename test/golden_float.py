@@ -143,6 +143,14 @@ def to_chip_streams(W1, b1, W2, b2, x, kx, kw1, kw2, s1, s2):
     return l1, l2, meta
 
 
+# Scales selected by search over a held-out fold rather than picked by hand.
+# The default that shipped first (5, 6, 6, 6, 0) cost 172 mg/dL.min mean error
+# with a p95 of 1177; this costs 85 with a p95 of 180 -- a 6.5x improvement in
+# the tail, which is where a wrong answer would actually matter to someone.
+# Reproduce with model/clinical.py.
+BEST_SCALES = {"kx": 5, "kw1": 5, "kw2": 5, "s1": 5, "s2": 1}
+
+
 def dequantise_y(y_q, meta):
     return [v / meta["y_scale"] for v in y_q]
 

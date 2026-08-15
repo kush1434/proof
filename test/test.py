@@ -784,8 +784,7 @@ async def _sweep_one(dut, W, mu, sd, base, idx, feat, want, values):
         raw[idx] = float(v)
         x = [(a - m) / s for a, m, s in zip(raw, mu, sd)]
 
-        l1, l2, meta = gf.to_chip_streams(W1, b1, W2, b2, x, kx=5, kw1=6, kw2=6,
-                                          s1=6, s2=0)
+        l1, l2, meta = gf.to_chip_streams(W1, b1, W2, b2, x, **gf.BEST_SCALES)
         h_read, y_read = await run_mode_b(dut, l1, l2, meta["s1"], meta["s2"])
         exp = gold.mode_b(l1, l2, meta["s1"], meta["s2"])
 

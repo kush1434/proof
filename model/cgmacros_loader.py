@@ -48,7 +48,47 @@ import re
 
 from iauc import SIGNED, iauc
 
-MEAL_TYPES = ("Breakfast", "Lunch", "Dinner")
+# The published data dictionary says 'Factor: Breakfast, Lunch, Dinner'. The
+# actual files contain TEN distinct label strings for four meal types --
+# 'Breakfast'/'breakfast', 'Lunch'/'lunch', 'Dinner'/'dinner',
+# 'Snacks'/'snack'/'Snack'/'snack 1' -- and snacks are not documented at all.
+# Filtering on == 'Breakfast' returns 170 of 436 breakfast records, silently
+# discarding 61 % of them, so every comparison here is normalised first.
+MEAL_TYPES = ("breakfast", "lunch", "dinner", "snack")
+
+
+def normalise_meal(mt):
+    """Map any observed label onto one of MEAL_TYPES, or '' if unrecognised."""
+    s = (mt or "").strip().lower()
+    if not s:
+        return ""
+    if s.startswith("snack"):
+        return "snack"
+    for m in ("breakfast", "lunch", "dinner"):
+        if s.startswith(m):
+            return m
+    return s
+
+
+# Upper bounds taken from the dataset's OWN published data dictionary, not
+# invented here: Carbs/Protein/Fat/Fiber 'Numeric: 0-176', Calories '30-1180'.
+# 52 meal records (3.0 %) exceed them -- Fiber as high as 2830 g and Calories
+# 2250 -- across 19 participants, and every one falls in a self-selected meal
+# (dinner or snack) rather than a standardised breakfast or lunch. A single
+# 2830 g fibre entry lifts the training standard deviation for fibre to 32 g
+# against a median of 3 g, which is enough to distort feature standardisation
+# and, downstream, the INT8 input quantisation.
+DOC_MAX = {"carbs": 176.0, "protein": 176.0, "fat": 176.0, "fiber": 176.0,
+           "calories": 1180.0}
+
+
+def implausible(rec):
+    """True if a record violates the dataset's own documented ranges."""
+    for k, lim in DOC_MAX.items():
+        v = rec.get(k)
+        if v is not None and v > lim:
+            return True
+    return False
 
 # Features fed to the chip. Carbohydrate and fibre are supplied SEPARATELY
 # rather than as net carbs: CGMacros provides both, and fibre has effects
@@ -92,19 +132,20 @@ def load_participant(path):
 def meal_records(
     path,
     pid,
-    meal_type="Breakfast",
+    meal_type="breakfast",
     minutes=120,
     step=15,
     convention=SIGNED,
     drop_nonpositive=True,
+    plausible=True,
 ):
     """Meal-level feature/target records for one participant."""
     times, libre, meals = load_participant(path)
     by_time = {t: g for t, g in zip(times, libre)}
 
-    out, skipped_gap, skipped_sign = [], 0, 0
+    out, skipped_gap, skipped_sign, skipped_impl = [], 0, 0, 0
     for idx, mt, row in meals:
-        if meal_type and mt.lower() != meal_type.lower():
+        if meal_type and normalise_meal(mt) != normalise_meal(meal_type):
             continue
 
         t0 = times[idx]
@@ -127,10 +168,9 @@ def meal_records(
             skipped_gap += 1
             continue
 
-        out.append(
-            {
+        rec = {
                 "pid": pid,
-                "meal_type": mt,
+                "meal_type": normalise_meal(mt),
                 "t": t0,
                 "carbs": carbs,
                 "fiber": fiber,
@@ -141,9 +181,13 @@ def meal_records(
                 "tod": t0.hour + t0.minute / 60.0,
                 "iauc": area,
                 "peak_rise": max(series) - series[0],
-            }
-        )
-    return out, {"gap": skipped_gap, "nonpositive": skipped_sign}
+        }
+        if plausible and implausible(rec):
+            skipped_impl += 1
+            continue
+        out.append(rec)
+    return out, {"gap": skipped_gap, "nonpositive": skipped_sign,
+                 "implausible": skipped_impl}
 
 
 def load_all(root, **kw):
@@ -192,7 +236,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("root", nargs="?",
                     default=r"C:\Users\kushk\Downloads\Claude\cgmacros\csv")
-    ap.add_argument("--meal", default="Breakfast",
+    ap.add_argument("--meal", default="breakfast",
                     help="Breakfast (the baseline's scope), or 'all'")
     ap.add_argument("--keep-nonpositive", action="store_true")
     args = ap.parse_args()
@@ -215,6 +259,7 @@ def main():
               f"min {min(per)}, max {max(per)})")
     print(f"  dropped, sensor gap or missing macros : {sum(s['gap'] for s in stats)}")
     print(f"  dropped, iAUC <= 0                    : {sum(s['nonpositive'] for s in stats)}")
+    print(f"  dropped, violates published ranges    : {sum(s.get('implausible', 0) for s in stats)}")
 
     if recs:
         a = [r["iauc"] for r in recs]
