@@ -350,7 +350,54 @@ further is a 1×2 tile conversation.
 
 ---
 
-## 9. Claims to avoid
+## 9. Related work, and what is actually new
+
+Checked 2026-08-15 across four independent angles. **Nothing found collides**,
+but the surviving claim is narrow and must be stated as such.
+
+### Established — cite, do not claim
+
+| area | representative work | why it is not this |
+|---|---|---|
+| Monotonic networks by construction | Runje & Shankaranarayana, ICML 2023; *Scalable Monotonic NNs*, ICLR 2024 | The softplus reparameterisation used here is squarely this family. Not a contribution. |
+| Certified monotonicity | Liu et al., NeurIPS 2020 (MILP) | Verification is **offline**, on a fixed model, and computationally costly. |
+| Monotonicity for clinical trust | established motivation in the ML literature | The motivation is borrowed, not new. |
+| Quantization destroying structural guarantees | *Quantization Robustness of Monotone Operator Equilibrium Networks*, 2026 | Closest hit, and still distinct: **monotone-operator** theory rather than input-output monotonicity, an **offline** certificate (‖ΔW‖₂ < m), and **no hardware**. |
+| Quantized-network verification | QVIP; SMT-based model checking of QNNs | Offline, and verifies the network — not the pin interface. |
+| Concurrent error detection in accelerators | algorithmic checksums; parity CED; uncertainty fingerprints; monitor placement | **These detect faults.** They ask "did the hardware compute correctly?" |
+| Runtime safety monitoring | *Run-Time Safety Monitoring of NN-Enabled Dynamical Systems* | System-level, software, monitors **outputs** — not a precondition on weights. |
+
+### The gap, stated precisely
+
+Every monotonicity guarantee above is established **at training time and verified
+offline, on a fixed model**. That is sound only while the model is fixed.
+
+**Streaming weights per patient breaks exactly that assumption.** Offline
+verification no longer covers what the device runs, and §1.3 shows the failure
+is not hypothetical: an unconstrained per-person refit violates the sign
+condition in **44 of 44** cases.
+
+The claim, in one sentence: *the precondition for a monotonicity guarantee is
+checkable from the weight stream itself, in hardware, at the interface, for 20
+flip-flops — and a device that streams per-user weights needs that check because
+offline verification cannot cover it.*
+
+The distinction that carries it: concurrent error detection asks **"did the
+hardware compute correctly?"** — this asks **"does this weight set admit the
+guarantee at all?"** In the failing case the arithmetic is perfectly correct and
+the result is bit-exact against the reference. Nothing else on the chip, and
+nothing in the CED literature, can tell.
+
+### Honesty about the search
+
+Four targeted searches found no prior hardware checking a semantic precondition
+on streamed weights. That is **weak evidence** — phrase it as "to our knowledge"
+and mean it, and treat the CED and runtime-monitoring literature as the nearest
+neighbours a reviewer will reach for.
+
+---
+
+## 10. Claims to avoid
 
 - ❌ "We beat XGBoost." The interval straddles zero.
 - ❌ "Monotonicity is free." It costs −0.036 [−0.059, −0.012].
