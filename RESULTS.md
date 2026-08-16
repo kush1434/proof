@@ -50,15 +50,15 @@ Three things worth saying:
 - This is what justifies streaming weights rather than storing them. The
   architecture was chosen for area; the data says it was worth having.
 
-### 1.1 A hole this opens in the safety argument
+### 1.1 The hole this opened, and what closed it
 
-The monotonicity guarantee is a property **of the weights**, and the chip
-cannot check the weights it is handed. Personalisation means a different weight
-set per patient, streamed by an untrusted host — so the question is whether a
-realistic per-person fit still satisfies the sign condition.
+The monotonicity guarantee is a property **of the weights**. Personalisation
+means a different weight set per patient, streamed by a host the chip has no
+reason to trust — so the question is whether a realistic per-person fit still
+satisfies the sign condition.
 
 **It never does.** Fine-tuning an unconstrained network on each held-out
-participant's own meals and checking the result:
+participant's own meals:
 
 | | |
 |---|---|
@@ -66,11 +66,9 @@ participant's own meals and checking the result:
 | sets violating the sign condition | **44 (100 %)** |
 | offending hidden units per bad set | median **3 of 8** |
 
-The chip accepts every one of them without complaint, and the guarantee is
-silently void for all of them. Enforcing monotonicity therefore cannot be left
-to whoever trains the model: either the host is trusted to use a constrained
-objective, or **the chip must verify its own precondition.** It currently does
-neither. See `RESULTS.md` §9.
+Enforcing monotonicity therefore cannot be left to whoever trains the model.
+Either the host is trusted to use a constrained objective, or the chip verifies
+its own precondition — and it now does the latter. See §9.
 
 ---
 
@@ -217,13 +215,13 @@ Tiny Tapeout IHP 26b, `ihp-sg13g2`, 1×1 tile.
 
 | | |
 |---|---|
-| Flip-flops / standard cells | 148 / 1330 |
-| Utilisation | 76.35 % |
-| Setup / hold worst slack | +9.89 ns / +0.121 ns @ 20 ns |
+| Flip-flops / standard cells | 168 / 1443 |
+| Utilisation | 83.53 % |
+| Setup / hold worst slack | +10.08 ns / +0.120 ns @ 20 ns |
 | DRC / LVS / antenna / latches / lint | 0 / 0 / 0 / 0 / 0 |
 | **Latency** | **914 cycles** = 18.3 µs @ 50 MHz, 0.91 ms @ 1 MHz |
-| **Energy per prediction** | **28.9 nJ** |
-| Energy, 3 meals/day for a year | 31.7 µJ |
+| **Energy per prediction** | **32.7 nJ** |
+| Energy, 3 meals/day for a year | 35.8 µJ |
 
 `gds`, `precheck` and `gl_test` all pass. Gate-level simulation is
 **functional only** — `-DFUNCTIONAL -DSIM`, no SDF back-annotation — so timing
@@ -235,34 +233,62 @@ is claimed on STA alone.
 
 | | |
 |---|---|
-| Top-level tests | 36, all bit-exact against the integer reference |
+| Top-level tests | 41, all bit-exact against the integer reference |
 | Unit tests | 6, **exhaustive** over all 65,536 signed 8×8 multiplier inputs |
-| Mutation score | **24 mutants: 23 caught, 1 proven equivalent, 0 escaped** |
-| Functional coverage | **49/49 named bins**, asserted not merely printed |
+| Mutation score | **29 mutants: 28 caught, 1 proven equivalent, 0 escaped** |
+| Functional coverage | **54/54 named bins**, asserted not merely printed |
 
 Four RTL defects and five testbench defects are logged in `BUGS.md`, including
 three cases where the environment reported a false pass.
 
 ---
 
-## 8. Open design question: an on-chip monotonicity guard
+## 8. The on-chip monotonicity guard — implemented
 
-The sign condition is checkable **from the weight stream itself**. The chip
-already sees `W1[j][carb]` (the first weight byte of hidden neuron `j`) and
-`W2[j]` (the `j`-th layer-2 weight byte). Storing 8 sign bits during layer 1
-and comparing them during layer 2 would let the device refuse — or at least
-flag — a weight set that cannot be monotone.
+`src/proof_core.v`. The chip verifies the safety precondition of the weights it
+is handed rather than assuming it.
 
-Estimated cost: ~10 flip-flops plus a comparator, on top of 148 flops at
-76.35 % utilisation.
+Both operands already cross the pins: the first weight byte of hidden neuron
+`j` is `W1[j][carb]`, and layer-2 weight byte `k` is `W2[k]`. Their signs ride a
+register that shifts and rotates in lockstep with the hidden-activation
+register, so the sign for the unit being consumed is always at the top. A
+disagreement raises `UNTRUSTED`.
 
-The obstacle is pins, not logic: all 8 `uio` bits are allocated. The cheapest
-resolution is to widen `SATURATED` into a general "do not trust this output"
-fault, asserted on accumulator saturation **or** a sign-condition violation —
-both mean the same thing to a caller, and it costs no pin.
+Two details it gets right, both directly tested:
 
-Not implemented. It is an RTL change to a signed-off design, and that is a
-decision about risk near a deadline, not a technical question.
+- a unit may oppose carbohydrate **twice** — negative on both sides is a
+  non-negative product — so a naive "all weights positive" check would be wrong;
+- a **zero** carbohydrate weight can never trigger it, which is why a non-zero
+  bit is carried alongside each sign.
+
+| | before | after |
+|---|---|---|
+| flip-flops | 148 | **168** |
+| standard cells | 1330 | 1443 |
+| utilisation | 76.35 % | **83.53 %** |
+| setup / hold | +9.89 / +0.121 ns | +10.08 / +0.120 ns |
+| DRC / LVS / latches / lint | 0 | 0 |
+
+**One pin, two causes.** All eight `uio` bits were already allocated, so
+`SATURATED` widened into `UNTRUSTED`: numeric overflow *or* void guarantee. Both
+mean the same thing to a caller, and the host holds the weights so it can always
+tell which.
+
+That merge cost observability, and the mutation suite caught it within minutes:
+the saturation tests used a carbohydrate weight of −128 against a positive `W2`,
+so they *also* violated the sign condition and M14 could hide behind the guard.
+Those weight sets now agree in sign, isolating saturation. M16 went **INVALID**
+rather than silently scoring, because the guard rewrote the line it patched —
+the did-not-apply guard doing its job for the second time this project.
+
+**Why it matters for the claim.** It changes the statement from "this chip
+computes a monotone function if whoever trained the model happened to constrain
+it" to "this chip declines to vouch for a weight set that cannot be monotone."
+Given the 100 % violation rate in §1.1, that is the difference between a
+guarantee and a hope.
+
+**At 83.53 % utilisation there is no room for another feature.** Anything
+further is a 1×2 tile conversation.
 
 ---
 
@@ -275,3 +301,7 @@ decision about risk near a deadline, not a technical question.
 - ❌ "The truncation bug endangers patients." Not reachable on real data.
 - ❌ "We invented monotonic networks." Established field — cite Liu et al.
   (NeurIPS 2020), Runje & Shankaranarayana (ICML 2023).
+- ⚠️ "To our knowledge" is doing real work in the guard claim. Two targeted
+  searches found no prior hardware that checks a monotonicity precondition at
+  its own interface, but absence of evidence in two searches is weak. Phrase it
+  as a limitation of the search, not as established priority.
