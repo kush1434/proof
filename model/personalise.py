@@ -94,6 +94,27 @@ def main():
             for k in K_VALUES:
                 if len(ts) - k < MIN_EVAL:
                     continue
+                # --- affine calibration y' = a*y + b, with a >= 0 -----------
+                # Two parameters instead of one, still closed form, and still
+                # MONOTONICITY-PRESERVING: a non-negative scale cannot reorder
+                # anything, so the guarantee survives per-person adaptation.
+                # Clamping a at zero is what keeps that true; an unconstrained
+                # least-squares fit could return a negative slope and silently
+                # invert the model for that patient.
+                if k >= 2:
+                    A = np.vstack([base_pred[:k], np.ones(k)]).T
+                    try:
+                        sol, *_ = np.linalg.lstsq(A, ts[:k], rcond=None)
+                        a_hat, b_hat = float(sol[0]), float(sol[1])
+                    except np.linalg.LinAlgError:
+                        a_hat, b_hat = 1.0, 0.0
+                    a_hat = max(0.0, a_hat)
+                    aff = a_hat * base_pred[k:] + b_hat
+                    acc[k].setdefault("affine", [])
+                    acc[k]["affine"].append(
+                        (mean_absolute_error(ts[k:], base_pred[k:]) * ys,
+                         mean_absolute_error(ts[k:], aff) * ys,
+                         a_hat))
                 acc[k].setdefault("per_subject", [])
                 # Personalise on the first k meals; score on everything after.
                 offset = 0.0 if k == 0 else float((ts[:k] - base_pred[:k]).mean())
@@ -151,6 +172,21 @@ def main():
                    "HARMS" if lo > 0 else "not established")
         print(f"    k={k:2d}  delta MAE {dd.mean():+7.0f}  "
               f"[95% CI {lo:+7.0f}, {hi:+7.0f}]   {verdict}")
+    print()
+    print("  affine calibration (2 params, a >= 0) vs bias only (1 param):")
+    print(f"    {'k':>3s} {'bias MAE':>10s} {'affine MAE':>11s} {'delta':>8s} "
+          f"{'median a':>9s} {'a clamped':>10s}")
+    for k in K_VALUES:
+        d = acc[k]
+        if not d.get("affine") or not d.get("per_subject"):
+            continue
+        bias_mae = np.mean([per for _, _, per in
+                            [(0, pop, per) for _, pop, per in d["per_subject"]]])
+        aff = np.array([[p, a, s] for p, a, s in d["affine"]])
+        n_clamp = int((aff[:, 2] == 0.0).sum())
+        print(f"    {k:3d} {bias_mae:10.0f} {aff[:, 1].mean():11.0f} "
+              f"{aff[:, 1].mean() - bias_mae:+8.0f} {np.median(aff[:, 2]):9.2f} "
+              f"{n_clamp:6d}/{len(aff):<4d}")
     print()
     print("  k = 0 is the population model with no personalisation at all.")
     print("=" * 74)

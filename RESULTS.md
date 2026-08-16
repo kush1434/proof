@@ -50,7 +50,50 @@ Three things worth saying:
 - This is what justifies streaming weights rather than storing them. The
   architecture was chosen for area; the data says it was worth having.
 
-### 1.1 The hole this opened, and what closed it
+### 1.1 One parameter is the right amount
+
+The chip streams all 83 parameters, so more than the bias could be refitted per
+person. The natural next step is an affine calibration `y' = a·y + b` — still
+closed form, still **monotonicity-preserving provided a ≥ 0**, since a
+non-negative scale cannot reorder anything.
+
+| k | bias-only MAE | affine MAE | Δ | median a | a clamped to 0 |
+|---|---|---|---|---|---|
+| 2 | 2080 | 3949 | **+1870** | 0.13 | **18/44** |
+| 3 | 1979 | 2406 | +427 | 0.99 | 9/44 |
+| 5 | 1860 | 1845 | −15 | 0.72 | 5/44 |
+| 8 | 1742 | 1701 | −42 | 0.67 | 7/44 |
+| 12 | 1744 | 1669 | −75 | 0.76 | 3/40 |
+| 16 | 1637 | 1603 | −34 | 0.82 | 4/38 |
+
+The second parameter is **catastrophic at small k** and buys 40–75 mg/dL·min at
+larger k, against an MAE near 1700. Bias-only is the right choice for the regime
+a real user is in, and that is now a measured decision rather than a default.
+
+**The monotonicity clamp is not theoretical.** At k = 2 the fitted slope had to
+be clamped at zero for **18 of 44 patients** — an unconstrained least-squares
+calibration would have returned a *negative* slope and silently inverted the
+model for 41 % of them.
+
+### 1.2 The architecture is data-limited, not capacity-limited
+
+Hidden width is the one structural choice baked into silicon (it is the depth of
+the `h` shift register), so it is worth knowing whether 8 was right.
+
+Paired across the same 5 folds, against `N_HIDDEN = 8`:
+
+| width | Δ R² | 95 % CI | reading |
+|---|---|---|---|
+| 4 | +0.016 | [−0.023, +0.055] | no measurable difference |
+| 6 | +0.029 | [−0.010, +0.068] | no measurable difference |
+| 12 | +0.001 | [−0.029, +0.030] | no measurable difference |
+
+**Nothing from 4 to 12 is distinguishable from 8.** The model is limited by the
+data, not by capacity — which is the honest explanation for R² ≈ 0.22, and it
+also rules out shrinking the hidden layer to buy area for the fibre guard: that
+would be a structural RTL change bought with a noise-level difference.
+
+### 1.3 The hole this opened, and what closed it
 
 The monotonicity guarantee is a property **of the weights**. Personalisation
 means a different weight set per patient, streamed by a host the chip has no
