@@ -133,53 +133,50 @@ reported a cost three to four times too large. The directions are therefore
 seeded from the unconstrained solution's own sign structure.
 
 Evaluated with **grouped 5-fold cross-validation over participants**. A random
-row split would leak individual response, which is the dominant signal here, and
-a single split cannot tell a real effect from a lucky partition — which matters,
-because it did not:
+row split would leak individual response, which is the dominant signal here.
 
 | model | mean R² | sd | per fold |
 |---|---|---|---|
-| depth-1 XGBoost, the notebook's model | +0.168 | 0.054 | +0.21 +0.14 +0.12 +0.12 +0.25 |
-| unconstrained MLP 6-8-1 | +0.216 | 0.085 | +0.23 +0.25 +0.08 +0.17 +0.34 |
-| monotone: carbs ↑ | +0.180 | 0.108 | +0.18 +0.22 +0.02 +0.13 +0.35 |
-| monotone: carbs ↑ *and* fibre ↓ | +0.189 | 0.143 | +0.15 +0.31 −0.03 +0.15 +0.38 |
+| depth-1 XGBoost, the notebook's model | +0.166 | 0.054 | +0.21 +0.14 +0.12 +0.11 +0.25 |
+| unconstrained MLP 6-8-1 | +0.230 | 0.098 | +0.27 +0.29 +0.10 +0.13 +0.36 |
+| monotone: carbs ↑ | +0.223 | 0.089 | +0.23 +0.31 +0.10 +0.14 +0.33 |
+| monotone: carbs ↑ *and* fibre ↓ | +0.205 | 0.079 | +0.19 +0.26 +0.09 +0.17 +0.32 |
 
 Differences are **paired across folds** — same partitions, so the difference has
-lower variance than either column and is the honest quantity to report:
+lower variance than either column:
 
-| comparison | delta | 95 % CI | reading |
+| comparison | Δ R² | 95 % CI | Bonferroni (m = 10) |
 |---|---|---|---|
-| carbs ↑ vs unconstrained | −0.036 | [−0.059, −0.012] | **a real, small cost** |
-| carbs ↑ + fibre ↓ vs unconstrained | −0.027 | [−0.092, +0.037] | not established |
-| XGBoost vs unconstrained | −0.048 | [−0.098, +0.003] | not established |
+| carbs ↑ vs unconstrained | −0.007 | [−0.033, +0.020] | no difference |
+| carbs ↑ + fibre ↓ vs unconstrained | −0.025 | [−0.062, +0.013] | no difference |
+| depth-1 XGBoost vs unconstrained | −0.064 | [−0.121, −0.006] | **does not survive** |
 
-**Monotonicity is not free.** An earlier single 11-participant split reported the
-carbohydrate constraint at −0.000 and this document said so; five folds show
-−0.036 with a confidence interval that excludes zero. The single split was
-optimistic, and the corrected claim is narrower but defensible: **the safety
-property costs a few hundredths of R², which is small relative to a
-between-fold spread of 0.085.**
+**No cost to monotonicity was detected**, and that is a different statement from
+"monotonicity is free". The interval admits a cost up to 0.033 R², so the honest
+claim is that **the study is underpowered to resolve a difference this small**,
+not that none exists. With 45 participants and 5 folds, nothing in this table
+survives correction for the ~10 comparisons made across the project — including
+the XGBoost result, which is nominally significant at 95 % and is **not** a
+basis for claiming the network beats the baseline.
 
-Two further readings that the single split would have got wrong:
+**This number moved once already.** An earlier version of this table reported
+the carbohydrate constraint at −0.036 with an interval excluding zero. That run
+predated the CGMacros plausibility filter and was never regenerated afterwards;
+the figures above come from the current pipeline. Derived results need
+re-running when anything upstream changes, and this one did not get it.
 
-- **The network does not beat the published-style baseline.** The XGBoost
-  comparison straddles zero. Any claim of "beats XGBoost" is unsupported.
-- **The wider interval on carbs + fibre is variance, not merit.** Its per-fold
-  spread (sd 0.143) is the largest in the table; adding a constraint did not
-  make the model better, it made the estimate noisier. Reading "no measurable
-  difference" as "the second guarantee is free" would repeat exactly the
-  mistake the single split caused.
+### 1.4a Selection bias: read every number above with this in mind
 
-`R² ≈ 0.22` also means most of the variance in postprandial response is *not*
-explained by meal macros plus pre-meal glucose. That is consistent with the
-literature and is a statement about the problem, not a defect in the chip.
+Design decisions — quantisation scales, hidden width, bias-versus-affine
+adaptation, the constraint set — were all made by looking at these same
+cross-validation folds. There is no untouched validation cohort. Every figure
+in this document is therefore **optimistically biased to an unknown degree**,
+and a clean estimate would need participants that no decision ever saw. With 45
+participants there were not enough to hold any back.
 
-Fibre's direction is empirically supported but weakly: marginal r −0.051,
-partial β −0.025, and within every carbohydrate tertile the higher-fibre half
-has the lower iAUC (−111, −1951, −683 mg/dL·min). It is a domain-knowledge
-constraint the data is consistent with, not one the data establishes.
-
-Reproduce with `python train.py --cv 5`.
+This does not invalidate the comparisons, which are paired and internally
+consistent, but it does mean the absolute R² values should be read as an upper
+bound on what a fresh cohort would give.
 
 ### 1.5 The baseline's scope is not this project's scope
 

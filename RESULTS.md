@@ -159,15 +159,30 @@ carbohydrate, 3 on fibre. Monotonicity must be trained for.
 
 **Cost, grouped 5-fold CV, paired across folds:**
 
-| comparison | Δ R² | 95 % CI | reading |
+| comparison | Δ R² | 95 % CI | Bonferroni (m = 10) |
 |---|---|---|---|
-| carbs ↑ vs unconstrained | −0.036 | [−0.059, −0.012] | real, small cost |
-| carbs ↑ + fibre ↓ vs unconstrained | −0.027 | [−0.092, +0.037] | not established |
-| depth-1 XGBoost vs unconstrained | −0.048 | [−0.098, +0.003] | not established |
+| carbs ↑ vs unconstrained | −0.007 | [−0.033, +0.020] | no difference |
+| carbs ↑ + fibre ↓ vs unconstrained | −0.025 | [−0.062, +0.013] | no difference |
+| depth-1 XGBoost vs unconstrained | −0.064 | [−0.121, −0.006] | **does not survive** |
 
-**Do not claim the network beats the baseline** — that interval straddles zero.
-An earlier single split reported the constraint as costing −0.000; five folds
-corrected it to −0.036. Report the corrected figure.
+Mean R²: XGBoost +0.166, unconstrained +0.230, carbs ↑ +0.223, carbs ↑ + fibre
+↓ +0.205.
+
+**No cost to monotonicity was detected** — which is not the same as free. The
+interval admits a cost up to 0.033 R², so the claim is that the study is
+**underpowered** to resolve a difference this small. Nothing here survives
+correction for the ~10 comparisons made across the project, the XGBoost result
+included, so **do not claim the network beats the baseline**.
+
+⚠️ This number moved once: an earlier table said −0.036 with an interval
+excluding zero. That run predated the CGMacros plausibility filter and was never
+regenerated. Derived results need re-running when anything upstream changes.
+
+⚠️ **Selection bias.** Quantisation scales, hidden width, adaptation method and
+constraint set were all chosen by looking at these same folds. There is no
+untouched validation cohort — 45 participants was not enough to hold any back —
+so every absolute figure here is optimistically biased and should be read as an
+upper bound.
 
 **Verified on the RTL** with real trained weights, both directions, bit-exact
 at every point:
