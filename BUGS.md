@@ -10,10 +10,10 @@ Python 3.8 (`.venv-legacy`, CGMacros baseline only).
 
 ```bash
 cd test
-python run.py                    # whole design, RTL      (36 tests)
+python run.py                    # whole design, RTL      (41 tests)
 python run.py --unit mac_serial  # submodule unit test    (6 tests)
 python run.py --gates            # post-layout netlist (needs PDK_ROOT)
-./mutate.sh                      # mutation testing       (24 mutants)
+./mutate.sh                      # mutation testing       (29 mutants)
 ./lint.sh                        # local pre-push synthesis gate
 ```
 
@@ -61,7 +61,7 @@ about whether the thing could be made. That is now covered by `./lint.sh` as a
 pre-push gate rather than by waiting for CI.
 
 As of 2026-08-14 **both modes are complete**: `mac_serial`, `accumulator`,
-`proof_core` and the pin wrapper. It passes 36 top-level tests and 6 unit tests, every
+`proof_core` and the pin wrapper. It passes 41 top-level tests and 6 unit tests, every
 functional one compared **bit-exactly** against `test/golden_quant.py`.
 
 `mac_serial` is additionally verified **exhaustively** — all 65,536 signed 8×8
@@ -99,7 +99,7 @@ testing is what tells them apart.**
 `./mutate.sh` — each mutant injected alone, relevant suites run, RTL restored
 afterwards and on interrupt via an EXIT trap.
 
-**24 considered, 23 caught, 1 equivalent, 0 escaped, 0 invalid, 0 compile-fail.**
+**29 considered, 28 caught, 1 equivalent, 0 escaped, 0 invalid, 0 compile-fail.**
 
 Three properties of the harness itself, each of which had to be true before any
 `CAUGHT` above means anything:
@@ -180,6 +180,9 @@ This list is maintained as things change. Four entries were removed on
 current design on every build. A list that names covered things is as
 misleading as one that omits uncovered things.
 
+- **The on-chip guard covers carbohydrate only**, not the fibre guarantee.
+  Extending it measured 187 flops against 168 (~87 % utilisation); declined
+  as too close to the edge for the weaker claim.
 - **Monotonicity covers carbohydrate and fibre only.** Nothing checks fat,
   protein, pre-meal glucose or time of day, and no direction is claimed for
   them. `tod` has a strong marginal association (r −0.221) and is left
@@ -219,7 +222,7 @@ misleading as one that omits uncovered things.
   and INT8 scaling the host chose. Nothing on-chip validates that a shift is
   sensible; a shift >= 24 simply replicates the sign bit. Well-defined,
   untested.
-- **Coverage is functional, not structural.** 48 named bins, all hit, but there
+- **Coverage is functional, not structural.** 54 named bins, all hit, but there
   is no line, toggle or FSM-state coverage — Icarus does not produce it. A bin
   model only covers situations someone thought to name.
 - **CDC.** Single clock domain by construction, so nothing to check.

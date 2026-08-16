@@ -7,11 +7,11 @@ verified is listed as not verified, rather than left unmentioned.
 
 ```bash
 cd test
-python run.py                    # whole design, RTL        (36 tests)
+python run.py                    # whole design, RTL        (41 tests)
 python run.py --unit mac_serial  # multiplier, exhaustive   (6 tests)
 python run.py --gates            # post-layout netlist      (needs PDK_ROOT)
 python monotonicity.py           # the safety property study
-cd .. && ./mutate.sh             # mutation testing         (24 mutants)
+cd .. && ./mutate.sh             # mutation testing         (29 mutants)
 cd ../model && python train.py   # train + sign-condition check
 cd .. && ./lint.sh               # local pre-push synthesis gate
 ```
@@ -226,7 +226,7 @@ and are deliberately not committed. A green CI run does not exercise it.
 exactly**, and every functional test compares against it rather than against
 hand-computed expected values.
 
-- 36 top-level tests, both modes, all bit-exact.
+- 41 top-level tests, both modes, all bit-exact.
 - Semantics are chosen so the two cannot drift: Python's `>>` on a negative int
   floors, which is precisely what Verilog's `>>>` does on a signed value, so
   requantisation is bit-exact with no correction on either side. Saturation is
@@ -265,7 +265,7 @@ hypothesis (§4).
 A green testbench proves nothing until it can go red. `./mutate.sh` injects a
 known bug, runs the relevant suites, and confirms the testbench notices.
 
-**24 considered, 23 caught, 1 proven equivalent, 0 escaped, 0 invalid.**
+**29 considered, 28 caught, 1 proven equivalent, 0 escaped, 0 invalid.**
 
 Three properties of the harness itself, each of which had to hold before any
 `CAUGHT` means anything:
@@ -294,8 +294,8 @@ Three mutants that escaped and what closing them taught:
 
 ## 5. Functional coverage
 
-`test/coverage.py` defines **48 named bins across 14 groups**, and the suite
-hits **48/48**. `test_zzz_coverage_report` *asserts* full coverage rather than
+`test/coverage.py` defines **54 named bins across 15 groups**, and the suite
+hits **54/54**. `test_zzz_coverage_report` *asserts* full coverage rather than
 merely printing it: adding a bin without stimulus to reach it breaks the build,
 which forces the gap to be either covered or removed with a stated reason.
 
@@ -339,10 +339,10 @@ From the LibreLane run, both modes:
 | Lint errors / warnings / inferred latches | 0 / 0 / 0 |
 | DRC (routing, converged 302→0 over 4 iters) / magic DRC / illegal overlap | 0 / 0 / 0 |
 | LVS errors / antenna / max-slew / max-cap / unmapped | 0 / 0 / 0 / 0 / 0 |
-| Setup worst slack @ 20 ns | +10.17 ns |
-| Hold worst slack | +0.123 ns |
-| Flip-flops / stdcells | 148 / 1,285 |
-| Utilisation | 74.57 % of a 1×1 tile |
+| Setup worst slack @ 20 ns | +10.08 ns |
+| Hold worst slack | +0.120 ns |
+| Flip-flops / stdcells | 168 / 1,443 |
+| Utilisation | 83.53 % of a 1×1 tile |
 
 Gate-level simulation passes.
 

@@ -121,6 +121,17 @@ module proof_core #(
   // Sign alone is not sufficient: a product is negative only if the signs
   // differ AND neither operand is zero, so a non-zero bit is carried too.
   // Without it a legitimately zero carbohydrate weight would be flagged.
+  //
+  // CARBOHYDRATE ONLY, AND THAT IS A MEASURED DECISION, NOT AN OVERSIGHT.
+  // The design also claims a second guarantee -- more fibre must never raise
+  // the response -- and the guard does NOT cover it. Extending it needs a
+  // second sign/non-zero register pair plus a weight-index counter: built and
+  // measured at 187 flip-flops against 168, which extrapolates to roughly 87 %
+  // utilisation from 83.53 %. That is too close to the edge for a 1x1 tile
+  // whose current run routes clean, and it buys the weaker of the two claims --
+  // fibre's direction is domain knowledge the data only weakly supports
+  // (marginal r = -0.051). The fibre guarantee therefore relies on the host
+  // using a constrained objective, and VERIFICATION.md says so plainly.
   reg [N_HIDDEN-1:0]  sgnreg;    // sign of W1[j][carb] per hidden unit
   reg [N_HIDDEN-1:0]  nzreg;     // and whether it is non-zero
   reg                 carb_sign; // captured for the neuron in flight
