@@ -64,3 +64,53 @@ jobs:
             echo "--- $f"
             python "$f"
           done
+
+      # The checkers above only approximate a compile. This is the compile.
+      # texlive-publishers carries IEEEtran.cls; the rest are what the preamble
+      # asks for.
+      - name: Install LaTeX
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            texlive-latex-base texlive-latex-recommended texlive-latex-extra \
+            texlive-fonts-recommended texlive-publishers poppler-utils
+
+      # Twice, so \ref and \cite resolve. -halt-on-error so a real failure is a
+      # failure rather than an interactive prompt that hangs the runner.
+      - name: Compile the paper
+        working-directory: paper
+        run: |
+          pdflatex -interaction=nonstopmode -halt-on-error proof_bibm2026.tex
+          pdflatex -interaction=nonstopmode -halt-on-error proof_bibm2026.tex
+
+      # The page limit is a hard rule of the call for papers, and the estimate
+      # in check_tex.py is only an estimate. This is the real number.
+      - name: Enforce the 5-page limit
+        working-directory: paper
+        run: |
+          pages=$(pdfinfo proof_bibm2026.pdf | awk '/^Pages:/ {print $2}')
+          echo "compiled to $pages page(s)"
+          if [ "$pages" -gt 5 ]; then
+            echo "::error::$pages pages, limit is 5 including references"
+            exit 1
+          fi
+
+      # Undefined references and overfull boxes do not fail the compile, but
+      # both are visible defects in a submitted PDF.
+      - name: Report undefined references and overfull boxes
+        working-directory: paper
+        run: |
+          if grep -qE "Warning: (Citation|Reference).*undefined" proof_bibm2026.log; then
+            grep -E "Warning: (Citation|Reference).*undefined" proof_bibm2026.log
+            echo "::error::undefined references"
+            exit 1
+          fi
+          echo "no undefined references"
+          grep -c "Overfull \\\\hbox" proof_bibm2026.log || echo "0 overfull hboxes"
+          grep -A1 "Overfull \\\\hbox" proof_bibm2026.log | head -40 || true
+
+      - name: Upload the compiled PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-pdf
+          path: paper/proof_bibm2026.pdf
