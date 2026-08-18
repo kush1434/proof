@@ -103,10 +103,41 @@ def check_tables(src):
     return problems
 
 
+def check_linebreak_brackets(src):
+    r"""A line break followed by '[' is parsed as an optional-length argument.
+
+    LaTeX reads ``\\[len]`` as "break, then skip len vertically". So a line that
+    merely BEGINS with a bracket after a break -- an author placeholder like
+    ``[email]``, a bare ``[1]``, anything -- is swallowed as a length and raises
+    "Missing number, treated as zero", which is fatal.
+
+    This cost a CI compile. The author block ended::
+
+        \textit{[city, country]}\\
+        {[email]}
+
+    without the braces, and pdflatex died at that line with no output PDF.
+    Nothing else in this file could see it: the source is perfectly well-formed
+    as characters, and only the parse goes wrong. Wrap the bracket in braces, or
+    start the line with something else.
+    """
+    problems = []
+    text = blanked(src)
+    # Break, optional trailing spaces or comment, at most one newline, then '['.
+    pat = re.compile(r"\\\\[ \t]*(?:%[^\n]*)?[ \t]*\n?[ \t]*\[")
+    for m in pat.finditer(text):
+        line = src.count("\n", 0, m.start()) + 1
+        problems.append(
+            "line %d: a line break followed by '[' parses as a length "
+            "argument -- wrap the bracket in braces" % line)
+    return problems
+
+
 def main():
     src = open(TEX, encoding="utf-8").read()
     print("compile-blocker checks")
-    print("  unescaped specials, math balance, tabular widths")
+    print("  unescaped specials, math balance, tabular widths,")
+    print("  line breaks followed by a bracket")
     print()
 
     # Math balance is reported FIRST and on its own, because one stray '$'
@@ -123,7 +154,8 @@ def main():
         print("  until inline math pairs up again.")
         return 1
 
-    problems = check_specials(src) + check_tables(src)
+    problems = (check_specials(src) + check_tables(src)
+                + check_linebreak_brackets(src))
     if problems:
         print("%d problem(s):" % len(problems))
         for p in problems:

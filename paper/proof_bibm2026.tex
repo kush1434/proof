@@ -40,10 +40,14 @@
 \title{Checking a Monotonicity Precondition in Hardware:\\
 A Glycemic-Response Inference Chip for Streamed Per-Patient Weights}
 
+% The braces around {[email]} are load-bearing: a line break followed by an
+% open bracket is parsed as \\[<length>], so a bare [email] here is a fatal
+% "Missing number, treated as zero". Keep them when the placeholder is filled
+% in, or start the line with anything other than a bracket.
 \author{\IEEEauthorblockN{Kush Shah}
 \IEEEauthorblockA{\textit{[affiliation]}\\
 \textit{[city, country]}\\
-[email]}
+{[email]}}
 % NOTE: authorship is undecided. The symposium rule names a *student* author;
 % an adult co-author is permitted but must not be the primary contributor and
 % cannot present in the student's place.
