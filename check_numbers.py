@@ -131,6 +131,24 @@ def in_correction(lines, idx):
     return any(m.lower() in window for m in CORRECTION_MARKERS)
 
 
+def matches(line, value):
+    """Is `value` quoted on this line, with or without its sign?
+
+    Substring matching was not enough. The paper phrases the baseline
+    comparison as "scores $0.059$ below the unconstrained network" rather than
+    as a negative number, so a stale "$0.064$ below" contained no minus sign and
+    slipped through a check written to look for "-0.064". Verified by injecting
+    exactly that and watching the gate pass.
+
+    So: compare on the magnitude, and require digit boundaries so that 0.064
+    does not match inside 10.0642.
+    """
+    v = norm(value).lstrip("-").strip()
+    if not re.match(r"^[\d.]+$", v):
+        return norm(value) in line          # "83 parameters", "40 of 44"
+    return re.search(r"(?<![\d.])" + re.escape(v) + r"(?![\d])", line) is not None
+
+
 def main():
     problems, seen = [], {}
 
@@ -144,9 +162,9 @@ def main():
             if in_correction(lines, i):
                 continue
             for val, replacement, why in RETIRED:
-                if norm(replacement) in line:
+                if matches(line, replacement):
                     continue          # before/after comparison, not staleness
-                if norm(val) in line:
+                if matches(line, val):
                     problems.append(
                         "%s:%d  retired value %r (%s)\n      %s"
                         % (rel, i + 1, val, why, line.strip()[:78]))
