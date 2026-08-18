@@ -25,3 +25,4 @@ test/mut_run.log
 test/weights.json
 model/weights.json
 __pycache__/
+paper/figures/__pycache__/

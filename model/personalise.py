@@ -32,6 +32,7 @@ number here.
 """
 
 import argparse
+import json
 import os
 
 import numpy as np
@@ -72,6 +73,12 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--root", default=DEFAULT_ROOT)
     ap.add_argument("--folds", type=int, default=5)
+    # Additive only: dumps values this script has ALREADY computed and printed,
+    # so the figures are generated from the run rather than transcribed off the
+    # terminal. It changes nothing above it -- stdout is byte-identical with and
+    # without the flag, which is the point.
+    ap.add_argument("--json", default=None, metavar="PATH",
+                    help="also write the per-k results as JSON, for figures")
     args = ap.parse_args()
 
     X, y, g = build_ordered(args.root)
@@ -190,6 +197,39 @@ def main():
     print()
     print("  k = 0 is the population model with no personalisation at all.")
     print("=" * 74)
+
+    if args.json:
+        # Recomputed from `acc` after every line above has been printed, so a
+        # mistake here cannot disturb a reported number.
+        out = {"k_values": list(K_VALUES), "min_eval": MIN_EVAL,
+               "folds": args.folds, "curve": {}}
+        for k in K_VALUES:
+            d = acc[k]
+            if not d["t"]:
+                continue
+            t = np.concatenate(d["t"])
+            p = np.concatenate(d["p"])
+            row = {
+                "subjects": int(d["subjects"]),
+                "improved": int(d["improved"]),
+                "r2": float(r2_score(t, p)),
+                "mae_pooled": float(mean_absolute_error(t, p)),
+                # (pid, population MAE, personalised MAE) per participant --
+                # paired, which is what carries the confidence interval.
+                "per_subject": [[int(pid), float(pop), float(per)]
+                                for pid, pop, per in d.get("per_subject", [])],
+            }
+            if d.get("affine"):
+                row["affine"] = [[float(b), float(a), float(s)]
+                                 for b, a, s in d["affine"]]
+            out["curve"][str(k)] = row
+        # Temp + os.replace, and encoding pinned: write_text truncates before
+        # encoding, so a stray non-ASCII byte leaves an empty file. See HANDOFF.
+        tmp = args.json + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(out, f, indent=1)
+        os.replace(tmp, args.json)
+        print(f"  per-k results written to {os.path.abspath(args.json)}")
 
 
 if __name__ == "__main__":

@@ -4,7 +4,12 @@ Assembled for writing. Each figure names the script that produces it, so
 nothing here has to be taken on trust or re-derived from memory.
 
 Reproduce: `model/train.py --cv 5`, `model/clinical.py`,
-`model/personalise.py`, `test/monotonicity.py`, `./mutate.sh`, `./lint.sh`.
+`model/personalise.py`, `model/sign_condition.py`, `model/width_sweep.py`,
+`model/ablation.py`, `test/monotonicity.py`, `./mutate.sh`, `./lint.sh`.
+
+Every table below now names a script that produces it. That was not true before
+2026-08-15 — §1.2, §1.3 and §5 had none — and writing the three missing ones
+corrected a claim in each. See `paper/NUMBERS-CHECK.md`.
 
 ---
 
@@ -80,18 +85,31 @@ model for 41 % of them.
 Hidden width is the one structural choice baked into silicon (it is the depth of
 the `h` shift register), so it is worth knowing whether 8 was right.
 
-Paired across the same 5 folds, against `N_HIDDEN = 8`:
+`model/width_sweep.py` (added 2026-08-15 — this had no script before, and the
+numbers below replace an earlier table that could not be re-derived).
 
-| width | Δ R² | 95 % CI | reading |
-|---|---|---|---|
-| 4 | +0.016 | [−0.023, +0.055] | no measurable difference |
-| 6 | +0.029 | [−0.010, +0.068] | no measurable difference |
-| 12 | +0.001 | [−0.029, +0.030] | no measurable difference |
+Paired across the same 5 folds, against `N_HIDDEN = 8`. Both models are swept,
+because it is the **constrained** one that ships:
 
-**Nothing from 4 to 12 is distinguishable from 8.** The model is limited by the
-data, not by capacity — which is the honest explanation for R² ≈ 0.22, and it
-also rules out shrinking the hidden layer to buy area for the fibre guard: that
+| width | Δ R², carbs ↑ (shipped) | 95 % CI | Δ R², unconstrained | 95 % CI |
+|---|---|---|---|---|
+| 4 | +0.012 | [−0.005, +0.030] | **−0.015** | **[−0.021, −0.008]** |
+| 6 | +0.004 | [−0.027, +0.035] | −0.003 | [−0.026, +0.021] |
+| 12 | −0.022 | [−0.059, +0.015] | +0.014 | [−0.006, +0.034] |
+
+Mean R², carbs ↑: 4 → +0.235, 6 → +0.227, 8 → +0.223, 12 → +0.201.
+
+**For the model that ships, nothing from 4 to 12 is distinguishable from 8.**
+The model is limited by the data, not by capacity — the honest explanation for
+R² ≈ 0.22 — and shrinking the hidden layer to buy area for the fibre guard
 would be a structural RTL change bought with a noise-level difference.
+
+⚠️ **One row is no longer a blanket claim.** In the *unconstrained* model width
+4 is measurably worse than 8 (−0.015, interval excluding zero), so "nothing
+from 4 to 12 is distinguishable from 8" is true of the shipped model and not of
+the unconstrained one. The effect is tiny and would not survive Bonferroni over
+the project's ~10 comparisons, but state it with the qualifier. The earlier
+table reported all three deltas as positive; these are measured.
 
 ### 1.3 The hole this opened, and what closed it
 
@@ -109,6 +127,18 @@ participant's own meals:
 | sets violating the sign condition | **44 (100 %)** |
 | offending hidden units per bad set | median **3 of 8** |
 
+`model/sign_condition.py` (added 2026-08-15 — nothing computed this before,
+which for the project's load-bearing claim was the wrong thing to leave
+unreproducible). It confirms both figures and adds that they hold across
+fine-tuning budgets from 20 to 400 epochs.
+
+**One nuance it surfaced, worth stating before a reviewer does:** the
+*population* model already fails on ~3 of 8 units before any personalisation.
+An unconstrained fit simply never satisfies the condition. So the precise claim
+is not that per-person refits are uniquely bad — it is that personalisation
+makes the condition **undecidable offline**, because the weight set the device
+runs is not the one anyone certified.
+
 Enforcing monotonicity therefore cannot be left to whoever trains the model.
 Either the host is trusted to use a constrained objective, or the chip verifies
 its own precondition — and it now does the latter. See §9.
@@ -124,8 +154,14 @@ carrying that subgroup and produced the opposite conclusion about T2D.
 **Within-participant ranking** — the actual use case, "should I swap this
 ingredient?":
 
-- median Spearman **ρ = +0.403** (IQR +0.216…+0.495)
-- **positive in 40 of 44 participants**
+- median Spearman **ρ = +0.382** (IQR +0.215…+0.495)
+- **positive in 41 of 44 participants**
+
+⚠️ Corrected 2026-08-15. Previously +0.403, IQR +0.216…+0.495, 40 of 44.
+`clinical.py` is deterministic — two runs agree exactly, and the R² and
+subgroup rows in the same output still match — so only this block had drifted.
+The same stale trio appears in §4's table and §5's ablation, corrected there
+too.
 
 **Population accuracy by glycemic status** (ADA A1c thresholds; the split
 reproduces the documented 15/16/14 exactly):
@@ -163,10 +199,16 @@ carbohydrate, 3 on fibre. Monotonicity must be trained for.
 |---|---|---|---|
 | carbs ↑ vs unconstrained | −0.007 | [−0.033, +0.020] | no difference |
 | carbs ↑ + fibre ↓ vs unconstrained | −0.025 | [−0.062, +0.013] | no difference |
-| depth-1 XGBoost vs unconstrained | −0.064 | [−0.121, −0.006] | **does not survive** |
+| depth-1 XGBoost vs unconstrained | −0.059 | [−0.118, −0.001] | **does not survive** |
 
-Mean R²: XGBoost +0.166, unconstrained +0.230, carbs ↑ +0.223, carbs ↑ + fibre
+Mean R²: XGBoost +0.170, unconstrained +0.230, carbs ↑ +0.223, carbs ↑ + fibre
 ↓ +0.205.
+
+⚠️ Corrected 2026-08-15. The XGBoost row previously read −0.064 [−0.121,
+−0.006] with a mean of +0.166. Re-running `train.py --cv 5` gives the figures
+above; the baseline is bit-deterministic across repeats, so that was a stale
+derived number, not noise. The reading is unchanged — the interval barely
+excludes zero and does not survive Bonferroni. See `paper/NUMBERS-CHECK.md`.
 
 **No cost to monotonicity was detected** — which is not the same as free. The
 interval admits a cost up to 0.033 R², so the claim is that the study is
@@ -223,8 +265,8 @@ the INT8 input quantisation.
 | | before | after |
 |---|---|---|
 | out-of-fold R² | +0.215 | +0.225 |
-| within-participant ρ (median) | +0.348 | +0.403 |
-| participants ranked correctly | 39/44 | 40/44 |
+| within-participant ρ (median) | +0.348 | +0.382 |
+| participants ranked correctly | 39/44 | 41/44 |
 | quantisation error (mean) | 418 | 172 mg/dL·min |
 
 Separately and already documented in the dataset paper — **not a finding, cite
@@ -250,20 +292,45 @@ held-out fold, not by hand.
 typical iAUC rather than 14 %. The tail matters more than the mean — that is
 where a wrong answer would reach someone.
 
+⚠️ Two caveats on that sentence (2026-08-15):
+
+- Those ratios compare *original scales on uncleaned data* against *selected
+  scales on cleaned data*, so they bundle the data-cleaning gain into a claim
+  about scale search. The **scale search alone** is 172 → 85 (2.0×) on the mean
+  and 1177 → 180 (6.5×) on the tail, which is what `golden_float.py`'s docstring
+  says. Report the two effects separately.
+- `clinical.py` also prints **max 7305 mg/dL·min** over the same 265 meals.
+  Giving mean and p95 but not max, while arguing the tail is what matters, is
+  the kind of omission a reviewer notices. The paper states it.
+
 **Ablation — per-participant features.** The input count is not fixed in
 silicon, so bio features are free in hardware. They still do not help:
 
+`model/ablation.py` (added 2026-08-15). The earlier table had no script and did
+not name its five bio features, so this is a **fresh measurement with a stated
+feature set** — A1c, BMI, Age, fasting glucose, insulin — rather than a
+reproduction. Its baseline row now agrees with §2 exactly, which the old one did
+not (+0.236 against §2's +0.225).
+
 | features | R² | ρ (median) | positive |
 |---|---|---|---|
-| 6 meal features | +0.236 | +0.403 | 40/44 |
-| + A1c | **+0.271** | +0.402 | 37/44 |
-| + A1c + BMI | +0.224 | **+0.463** | 40/44 |
-| + all 5 bio | **−0.005** | +0.444 | 42/44 |
+| 6 meal features | +0.225 | +0.382 | 41/44 |
+| + A1c | **+0.256** | +0.395 | 37/44 |
+| + A1c + BMI | +0.207 | **+0.463** | 40/44 |
+| + all 5 bio | **−0.014** | +0.440 | 42/44 |
 
-All five collapse R² — with 45 participants each participant-level feature
-fits 45 points. A1c alone helps population R² but **cannot improve within-person
-ranking by construction**, being constant within a person. Ranking is the use
-case, so the design keeps the 6 meal features.
+All five collapse R² — with 45 participants each participant-level feature fits
+45 points. A1c alone helps population R² and leaves ranking essentially
+untouched, while *reducing* the number of participants ranked in the right
+direction from 41 to 37. Ranking is the use case, so the design keeps the 6
+meal features.
+
+⚠️ **Do not say a participant-level feature "cannot improve ranking by
+construction."** That holds only if the feature enters additively. This model
+is an MLP, so a constant-within-person input can still interact with the meal
+features and change within-person ordering — and measurably does, in both
+directions (ρ +0.382 → +0.395 with A1c, but 41/44 → 37/44). The argument for
+dropping bio features is empirical, not structural.
 
 ---
 
@@ -400,13 +467,19 @@ neighbours a reviewer will reach for.
 ## 10. Claims to avoid
 
 - ❌ "We beat XGBoost." The interval straddles zero.
-- ❌ "Monotonicity is free." It costs −0.036 [−0.059, −0.012].
+- ❌ "Monotonicity is free." **No cost was detected** — −0.007 [−0.033, +0.020]
+  — but the interval admits a cost up to 0.033 R², so the study is underpowered
+  to resolve a difference that small. *(Corrected 2026-08-15: this bullet used
+  to cite −0.036 [−0.059, −0.012], which is the pre-plausibility-filter figure
+  §3 already flags as stale. The advice was right and the number was the one it
+  warns against.)*
 - ❌ "We discovered CGMacros breakfasts are standardised." Documented in the
   dataset paper.
 - ❌ "The truncation bug endangers patients." Not reachable on real data.
 - ❌ "We invented monotonic networks." Established field — cite Liu et al.
   (NeurIPS 2020), Runje & Shankaranarayana (ICML 2023).
-- ⚠️ "To our knowledge" is doing real work in the guard claim. Two targeted
-  searches found no prior hardware that checks a monotonicity precondition at
-  its own interface, but absence of evidence in two searches is weak. Phrase it
-  as a limitation of the search, not as established priority.
+- ⚠️ "To our knowledge" is doing real work in the guard claim. **Four** targeted
+  searches (§9, 2026-08-15) found no prior hardware that checks a monotonicity
+  precondition at its own interface, but absence of evidence in four searches is
+  weak. Phrase it as a limitation of the search, not as established priority.
+  *(This bullet said "two"; §9 and HANDOFF both say four.)*
