@@ -27,7 +27,18 @@ FIGDIR = os.path.join(HERE, "figures", "out")
 
 PAGE_LIMIT = 5
 COL_H = 9.25        # IEEEtran column height, inches
-WORDS_PER_PAGE = 1050
+
+# CALIBRATED, not guessed. This started at 1050 words/page, which predicted
+# 4.77 pages for a draft that compiled to 6 -- an error large enough to hide a
+# full page over a hard limit, which is the one thing this number exists to
+# catch. Solving the model against that measurement (3584 words, 0.96 pages of
+# floats, 0.36 of references) gives 766. Rounded down to 750 so the estimate
+# errs long rather than short.
+#
+# It is one data point. CI compiles the paper and counts the pages for real;
+# treat this only as the fast check that catches a gross overrun before a
+# five-minute round trip.
+WORDS_PER_PAGE = 750
 CAPTION_IN = 0.55   # allowance per float for its caption
 WIDE_FLOATS = {"fig3_architecture"}
 

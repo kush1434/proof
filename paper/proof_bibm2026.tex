@@ -59,23 +59,22 @@ A Glycemic-Response Inference Chip for Streamed Per-Patient Weights}
 Monotonicity---the guarantee that predicted glycemic response never falls as
 carbohydrate rises---is the kind of structural property that makes a model
 auditable by a clinician. Every method we are aware of establishes it at
-training time and verifies it \emph{offline, on a fixed model}. That is sound
+training time and verifies it \emph{offline, on a fixed model}, which is sound
 only while the model is fixed. We describe \emph{Proof}, a $1\times1$-tile
 fixed-point inference ASIC for the IHP SG13G2 open PDK that holds no weights at
-all---every one of them arrives from an untrusted host, so the model can be
-per-patient---and we show that this breaks the offline assumption: fine-tuning
-an unconstrained network on each held-out participant of the CGMacros cohort
-violates the sign condition monotonicity depends on in 44 of 44 cases, stably
-across a twentyfold range of fine-tuning budgets. The chip therefore checks its
-own precondition at the pin interface, for 20 flip-flops, by carrying one sign
-bit and one non-zero bit per hidden unit in registers that rotate in lockstep
-with the hidden activations. We also report a defect that motivates the
-approach: the datapath was provably monotone internally while the fixed-width
-output field truncated, so the \emph{reported} response fell from 31{,}293 to
-$-31{,}209$ for a one-count rise in carbohydrate while the true value rose. The
-design closes with 168~flip-flops, 1443~standard cells, 83.53\,\% utilisation
-and zero DRC, LVS and antenna violations. All accuracy figures are from a
-45-participant cohort with no held-out validation set and should be read as
+all: every one arrives from an untrusted host, so the model can be per-patient.
+That breaks the offline assumption. Fine-tuning an unconstrained network on
+each held-out participant of the CGMacros cohort violates the sign condition
+monotonicity depends on in 44 of 44 cases, stably across a twentyfold range of
+fine-tuning budgets, so the chip checks its own precondition at the pin
+interface for 20 flip-flops, carrying one sign bit and one non-zero bit per
+hidden unit in registers that rotate in lockstep with the hidden activations.
+We also report a defect that motivates the approach: the datapath was provably
+monotone internally while the fixed-width output field truncated, so the
+\emph{reported} response fell from 31{,}293 to $-31{,}209$ for a one-count rise
+in carbohydrate while the true value rose. The design closes at 83.53\,\%
+utilisation with zero DRC, LVS and antenna violations. All accuracy figures
+come from 45 participants with no held-out validation set and should be read as
 optimistically biased upper bounds.
 \end{abstract}
 
@@ -110,83 +109,66 @@ PDK~\cite{ihp}, but its consequence is that the weights can be
 \emph{per patient}: the same silicon, a different model for each person. An
 offline certificate covers the weight set it was computed for and nothing else.
 
-This paper makes four claims.
+This paper makes four claims. Per-patient weights are worth having: refitting
+one parameter from about eight logged meals---three days---improves
+per-participant error by a margin excluding zero, while refitting from a single
+meal is measurably \emph{worse} than not personalising at all
+(Fig.~\ref{fig:personalisation}). The precondition really does fail: an
+unconstrained per-person refit violates the sign condition in 44 of 44
+participants. It is nevertheless checkable in hardware, from the weight stream
+itself, for 20 flip-flops, because both operands already cross the pins
+(Fig.~\ref{fig:arch}). And such a property can hold internally while breaking
+at the interface---our datapath was provably monotone while the output field
+truncated, and truncation wraps (Fig.~\ref{fig:r4}).
 
-\begin{enumerate}
-\item Per-patient weights are worth having. Refitting one parameter from about
-eight logged meals---three days---improves per-participant mean absolute error
-by a margin whose 95\,\% confidence interval excludes zero, while refitting
-from a single meal is measurably \emph{worse} than not personalising at all
-(Fig.~\ref{fig:personalisation}).
-
-\item The precondition really does fail. An unconstrained per-person refit
-violates the sign condition in 44 of 44 participants.
-
-\item That precondition is checkable in hardware, from the weight stream
-itself, for 20 flip-flops, because both of its operands already cross the pins
-(Fig.~\ref{fig:arch}).
-
-\item The property can hold internally and still break at the interface. Our
-datapath was provably monotone while the output field truncated, and truncation
-wraps (Fig.~\ref{fig:r4}).
-\end{enumerate}
-
-We are explicit throughout about what the evidence does not support. In
-particular we do not claim the network beats its baseline, and we do not claim
-monotonicity is free.
+We are explicit throughout about what the evidence does not support: we do not
+claim the network beats its baseline, and we do not claim monotonicity is free.
 
 \section{Related Work}
 
-\textbf{Monotonic networks by construction.} Architectures that guarantee
+\textbf{Monotonicity, established and certified.} Architectures that guarantee
 monotonicity by reparameterising weights through a non-negative
-map~\cite{runje2023,scalable2024} are an established family. The softplus
+map~\cite{runje2023,scalable2024} are an established family; the softplus
 reparameterisation we train with is squarely in it and is not a contribution
-here.
-
-\textbf{Certified monotonicity.} Liu et al.~\cite{liu2020} certify monotonicity
-of a trained network by mixed-integer programming. The verification is offline,
-on a fixed model, and computationally costly.
+here. Liu et al.~\cite{liu2020} instead certify a trained network by
+mixed-integer programming --- offline, on a fixed model, and costly.
 
 \textbf{Quantization versus structural guarantees.} Recent work asks whether
 quantization preserves monotone-operator properties~\cite{quantmon2026}. It is
 the nearest hit to ours and still distinct: monotone-operator theory rather
 than input--output monotonicity, an offline norm-based certificate, and no
 hardware. Formal verification of quantized networks~\cite{qvip2022} is likewise
-offline, and verifies the network rather than the interface through which it is
-loaded.
+offline, and verifies the network rather than the interface it arrives through.
 
 \textbf{Concurrent error detection.} Accelerators are commonly protected by
-algorithmic checksums descended from ABFT~\cite{huang1984}, applied to the
-fully-connected and convolutional layers of DNN accelerators at low
-cost~\cite{ozen2020}, and by schemes targeting permanent faults in the systolic
-arrays such accelerators are built from~\cite{zhang2018}. The distinction
-that matters here is not one of degree. \emph{Concurrent error detection asks
-whether the hardware computed correctly. We ask whether this weight set admits
-the guarantee at all.} In the failing case the arithmetic is perfectly correct
-and every output is bit-exact against the integer reference model; nothing in
-the datapath, and nothing a checksum can see, is wrong. Run-time safety
-monitoring~\cite{xiang2022} is closer in spirit but operates at system level,
-in software, on \emph{outputs}, not on a precondition over incoming weights.
+algorithmic checksums descended from ABFT~\cite{huang1984}, applied to DNN
+layers at low cost~\cite{ozen2020}, and by schemes targeting permanent faults
+in systolic arrays~\cite{zhang2018}. The distinction that matters here is not
+one of degree. \emph{Concurrent error detection asks whether the hardware
+computed correctly. We ask whether this weight set admits the guarantee at
+all.} In the failing case the arithmetic is perfectly correct and every output
+is bit-exact against the integer reference model; nothing a checksum can see is
+wrong. Run-time safety monitoring~\cite{xiang2022} is closer in spirit but
+operates at system level, in software, on \emph{outputs}, not on a precondition
+over incoming weights.
 
 To our knowledge no prior hardware checks a semantic precondition on a streamed
-weight set at its own interface. That statement rests on four targeted
-literature searches, which is weak evidence; we state it as a limitation of the
-search rather than as established priority, and we regard the concurrent-error
-and run-time-monitoring literatures as the nearest neighbours a reader will
-reach for.
+weight set at its own interface. That rests on four targeted literature
+searches, which is weak evidence; we state it as a limitation of the search
+rather than as priority, and regard the concurrent-error and
+run-time-monitoring literatures as the nearest neighbours.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{fig1_personalisation.pdf}
 \caption{Personalisation from the first $k$ meals in time order, adapting the
 output bias only, scored on each participant's remaining meals. (a)~Pooled
-$R^2$ over all held-out meals; the dashed line is the unpersonalised population
-model. (b)~The same result per participant, as a paired change in mean absolute
-error with a 95\,\% confidence interval; filled markers are intervals excluding
-zero. One meal is significantly worse than none ($+354$ [$+77$, $+631$]
-mg/dL$\cdot$min); eight meals significantly better ($-150$ [$-285$, $-16$]).
-A participant needs $k+6$ meals to be scored, so the cohort shrinks at $k=12$
-and $16$ (shaded); those points are not the same people as the rest.}
+$R^2$; the dashed line is the unpersonalised population model. (b)~The same per
+participant, as a paired change in mean absolute error with a 95\,\% confidence
+interval; filled markers exclude zero. One meal is significantly worse than
+none, eight significantly better. A participant needs $k+6$ meals to be scored,
+so the cohort shrinks at $k=12$ and $16$ (shaded) and those points are not the
+same people as the rest.}
 \label{fig:personalisation}
 \end{figure}
 
@@ -195,21 +177,21 @@ and $16$ (shaded); those points are not the same people as the rest.}
 \subsection{One datapath, streamed weights}
 
 Proof computes a two-layer quantised network,
-\begin{equation}
-h = \mathrm{ReLU}\!\left(\mathrm{clamp}_{0}^{127}\!\left((W_1 x + b_1) \gg s_1\right)\right),
-\quad
-y = (W_2 h + b_2) \gg s_2 ,
-\end{equation}
+% Was one line and 27.6 pt too wide for the column. Split rather than scaled,
+% so the type size still matches the body.
+\begin{align}
+h &= \mathrm{ReLU}\!\left(\mathrm{clamp}_{0}^{127}\!\left((W_1 x + b_1) \gg s_1\right)\right), \nonumber \\
+y &= (W_2 h + b_2) \gg s_2 ,
+\end{align}
 over INT8 weights and activations with power-of-two requantisation, so
 rescaling is an arithmetic shift and the chip needs no second multiplier. Every
 neuron of both layers is the same saturating dot product over a serial
 $8\times8$ multiplier and a 24-bit accumulator; only the source of the
-activations differs. In layer~1 the host supplies them, and re-streams the
-input vector for each hidden neuron---48 bytes rather than 6, which saves 48
-flip-flops at a bandwidth cost that is free at meal timescales. In layer~2 the
-chip supplies them from the hidden-activation register. Biases need no
-dedicated logic: the chip presents the constants 127 and 1 after the eight
-hidden activations, so a bias is $v_8 \cdot 127 + v_9$, exact to the unit.
+activations differs. In layer~1 the host supplies them, re-streaming the input
+vector per hidden neuron---48 bytes rather than 6, saving 48 flip-flops at a
+bandwidth cost that is free at meal timescales. In layer~2 the chip supplies
+them from the hidden-activation register, following them with the constants 127
+and 1 so that a bias is $v_8 \cdot 127 + v_9$ with no bias-specific logic.
 
 \subsection{The monotonicity argument, and where it broke}
 
@@ -233,14 +215,10 @@ standard mode is monotone.
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{fig2_r4_divergence.pdf}
-\caption{The property held internally and broke at the pins. Sweeping the
-carbohydrate input for a weight set that \emph{satisfies}
-(\ref{eq:sign}), the internal value never falls, but the 16-bit output field
-originally truncated, and truncation wraps: one extra count of carbohydrate
-made the reported response fall from 31{,}293 to $-31{,}209$ while the true
-value rose to 34{,}327. Saturating the field restores monotonicity end to end.
-The defect appeared in 55 of 400 randomised weight sets. No stimulus-driven
-test could find it, because the reference model truncated in the same way.}
+\caption{The property held internally and broke at the pins. Carbohydrate swept
+for a weight set that \emph{satisfies} (\ref{eq:sign}): the internal value
+never falls, but the truncating field wraps. Saturating it restores
+monotonicity end to end.}
 \label{fig:r4}
 \end{figure}
 
@@ -266,29 +244,28 @@ monotone, and the study reports 0 of 400.
 the first weight byte of hidden neuron $j$, while $W_2[j]$ arrives much later,
 in layer~2. Rather than store a weight, the guard keeps one sign bit
 (\texttt{sgnreg}) and one non-zero bit (\texttt{nzreg}) per hidden unit in
-registers that shift and rotate in lockstep with the hidden activations
-(\texttt{hreg}), so the bits for the unit being consumed are at the head of the
-register exactly when that unit's layer-2 weight arrives. A disagreement raises
-a sticky flag. The hop marks wires that cross without connecting.}
+registers that rotate in lockstep with the hidden activations (\texttt{hreg}),
+so the bits for the unit being consumed reach the head exactly when that unit's
+layer-2 weight arrives. The hop marks wires crossing without connecting.}
 \label{fig:arch}
 \end{figure*}
 
 Condition (\ref{eq:sign}) is a property of the weights, not of the RTL, so a
 device handed a fresh weight set for every patient cannot inherit anyone's
-offline proof. Proof therefore evaluates (\ref{eq:sign}) itself, in hardware,
-as the weights arrive.
+offline proof. Proof therefore evaluates it itself, in hardware, as the weights
+arrive.
 
-The mechanism is cheap because both operands already cross the pins, and the
-only difficulty is that they arrive far apart in time. By convention
-carbohydrate is input~0, so $W_1[j][c]$ is the \emph{first} weight byte of
-hidden neuron $j$; its partner $W_2[j]$ is the $j$-th weight byte of layer~2,
-many bytes later. Storing the weights to compare them would cost more than the
-datapath. Instead the guard stores one bit of each: the sign of $W_1[j][c]$ and
-whether it is non-zero, in two 8-bit registers that shift and rotate in
+The mechanism is cheap because both operands already cross the pins; the only
+difficulty is that they arrive far apart in time. Carbohydrate is input~0 by
+convention, so $W_1[j][c]$ is the \emph{first} weight byte of hidden neuron
+$j$, while its partner $W_2[j]$ is the $j$-th weight byte of layer~2, many
+bytes later. Storing the weights to compare them would cost more than the
+datapath. Instead the guard stores one bit of each---the sign of $W_1[j][c]$
+and whether it is non-zero---in two 8-bit registers that rotate in
 \emph{lockstep} with the hidden-activation register. Because layer~2 consumes
-hidden activations from the head of that register, the corresponding sign and
-non-zero bits are at the head of theirs at the same moment, and the comparison is an XOR,
-an eight-input OR reduction and three ANDs (Fig.~\ref{fig:arch}).
+activations from the head of that register, the matching sign and non-zero bits
+are at the head of theirs at the same moment, and the comparison is an XOR, an
+eight-input OR reduction and three ANDs (Fig.~\ref{fig:arch}).
 
 Two subtleties are worth stating, since both are directly tested. A unit may
 oppose carbohydrate \emph{twice}---negative on both sides is a non-negative
@@ -296,68 +273,59 @@ product---so a naive ``all weights positive'' check would reject valid models.
 And a \emph{zero} carbohydrate weight can never violate the condition, which is
 why a non-zero bit is carried beside each sign.
 
-The guard raises a sticky flag that is merged with the accumulator's saturation
-flag onto one output pin. All eight bidirectional pins were already allocated,
-so \texttt{SATURATED} widened into \texttt{UNTRUSTED}: numeric overflow
-\emph{or} a void guarantee. Both mean the same thing to a caller---do not act on
-this output---and the host holds the weights, so it can always tell which.
-
-That merge cost observability, and our mutation suite caught the loss within
-minutes: the saturation tests happened to violate the sign condition too, so a
-saturation-specific mutant could hide behind the guard. Those weight sets now
-agree in sign, isolating saturation.
+The sticky flag is merged with the accumulator's saturation flag onto one
+output pin, all eight having been allocated already: \texttt{UNTRUSTED} means
+numeric overflow \emph{or} a void guarantee. Both mean the same thing to a
+caller, and the host holds the weights so it can always tell which. That merge
+cost observability, and the mutation suite caught the loss within minutes---the
+saturation tests happened to violate the sign condition too, so a
+saturation-specific mutant could hide behind the guard.
 
 The guard covers carbohydrate only. We built and measured a second guard for
 the fibre direction and declined it: 187 flip-flops against 168, extrapolating
-to roughly 87\,\% utilisation from 83.53\,\%, too close to the edge for a tile
-that currently routes clean, and it buys the weaker of the two claims---fibre's
-direction is domain knowledge that our data supports only marginally
-($r=-0.051$). The fibre guarantee therefore still relies on the host using a
-constrained objective, and we say so rather than implying otherwise.
+to roughly 87\,\% utilisation, too close to the edge for a tile that currently
+routes clean, and it buys the weaker of the two claims---fibre's direction is
+domain knowledge our data supports only marginally ($r=-0.051$). That guarantee
+therefore still relies on the host using a constrained objective, and we say so
+rather than implying otherwise.
 
 \section{Data and Training}
 
 We use CGMacros~\cite{cgmacros}, 45 participants with concurrent continuous
-glucose monitoring and photographed, macronutrient-labelled meals. The target
-is two-hour incremental area under the glucose curve, sampled every 15 minutes
-from the Libre sensor. Splits are grouped by participant throughout; a random
-row split would place one person's meals on both sides and inflate every
-number, because individual response is exactly what varies most.
+glucose monitoring and photographed, macronutrient-labelled meals. The target is
+two-hour incremental area under the glucose curve. Splits are grouped by
+participant throughout; a random row split would place one person's meals on
+both sides and inflate every number, because individual response is exactly what
+varies most.
 
-Two data-quality problems required handling and are not described in the
-dataset documentation. \texttt{Meal Type} carries ten distinct label strings
-for four meal types, so filtering on \texttt{== 'Breakfast'} silently discards
-61\,\% of breakfasts. A further 52 records (3.0\,\%) exceed the dataset's own
-published maxima---fibre as high as 2830~g against a documented 176---every one
-of them in a self-selected rather than a standardised meal. A single 2830~g
-entry lifts the training standard deviation for fibre to 32~g against a median
-of 3~g, distorting feature standardisation and, in turn, INT8 quantisation.
-Filtering against the published ranges improves out-of-fold $R^2$ from $+0.215$
-to $+0.225$ and cuts mean quantisation error from 418 to 172 mg/dL$\cdot$min.
+Two undocumented data-quality problems needed handling: \texttt{Meal Type}
+carries ten label strings for four meal types, so filtering on
+\texttt{== 'Breakfast'} silently discards 61\,\% of breakfasts; and 52 records
+(3.0\,\%) exceed the dataset's own published maxima, one fibre entry of 2830~g
+against a documented 176 being enough to lift the training standard deviation
+for fibre to 32~g against a median of 3~g. Filtering against the published
+ranges improves out-of-fold $R^2$ from $+0.215$ to $+0.225$.
 
-Separately, and documented in the dataset's own description rather than
-discovered here: CGMacros breakfasts and lunches are standardised test meals.
-The 383 usable breakfasts contain only 6 distinct macronutrient combinations.
-Any breakfast-only analysis of this cohort is therefore a
-\emph{personalisation} study, not a meal-composition one, which is why we train
-across all meal types.
+Separately, and documented in the dataset rather than discovered here: CGMacros
+breakfasts and lunches are standardised test meals, the 383 usable breakfasts
+containing only 6 distinct macronutrient combinations. Any breakfast-only
+analysis is therefore a \emph{personalisation} study rather than a
+meal-composition one, which is why we train across all meal types.
 
 The model takes six meal features---carbohydrate, fibre, fat, protein, pre-meal
 glucose, time of day---with eight hidden units. Participant-level biological
 features are free in hardware, since the input count is not fixed in silicon,
 but they do not earn their place: adding A1c, BMI, age, fasting glucose and
-insulin together collapses $R^2$ from $+0.225$ to $-0.014$, since with 45
-participants each such feature is fitted from 45 points. A1c alone does raise
-population $R^2$, to $+0.256$, but it leaves within-person ranking essentially
-unchanged and \emph{reduces} the number of participants ranked in the right
-direction from 41 to 37---and ranking is the use case. For hidden width, no
-value from 4 to 12 is distinguishable from 8 for the constrained model that
-ships, so the model is data-limited rather than capacity-limited and there is
-no case for shrinking the layer to buy area. Quantisation scales were selected by
-search over a held-out fold, giving a mean float-to-INT8 error of 85 and a 95th
-percentile of 180 mg/dL$\cdot$min over 265 held-out meals against a cohort mean
-response near 2900---though the maximum over those meals is
-7305 mg/dL$\cdot$min, on a single meal.
+insulin together collapses $R^2$ from $+0.225$ to $-0.014$, each being fitted
+from 45 points. A1c alone raises population $R^2$ to $+0.256$ but leaves
+within-person ranking unchanged while \emph{reducing} the participants ranked
+in the right direction from 41 to 37---and ranking is the use case. No hidden
+width from 4 to 12 is distinguishable from 8 for the constrained model that
+ships, so the model is data-limited rather than capacity-limited. Quantisation
+scales were selected by search over a held-out fold, giving a mean float-to-INT8
+error of 85 and a 95th percentile of 180 mg/dL$\cdot$min over 265 held-out meals
+against a cohort mean response near 2900---though the maximum is 7305, on a
+single meal.
 
 Monotone models are trained by reparameterisation rather than penalty, so the
 constraint holds exactly at every step: for constrained input $i$ with required
@@ -440,49 +408,57 @@ within-group variance differs.
 \subsection{Silicon and verification}
 
 \begin{table}[t]
-\caption{Implementation, IHP SG13G2, $1\times1$ Tiny Tapeout tile}
+\caption{Implementation, IHP SG13G2, $1\times1$ Tiny Tapeout tile.
+Latency 896 cycles $=$ 17.9\,\textmu s and 32.0\,nJ at 50\,MHz, so 35.1\,\textmu J
+for three meals a day for a year.}
 \label{tab:silicon}
 \centering
-\small
+\footnotesize
+% Labels shortened and the two spanning rows moved into the caption: the row
+% set was 43 pt wider than the column and overflowed into the gutter.
 \begin{tabular}{lrr}
 \toprule
- & without guard & \textbf{as built} \\
+ & no guard & \textbf{as built} \\
 \midrule
-Flip-flops                     & 148     & \textbf{168} \\
-Standard cells                 & 1330    & \textbf{1443} \\
-Utilisation                    & 76.35\,\% & \textbf{83.53\,\%} \\
-Setup / hold slack @ 20\,ns    & $+9.89$ / $+0.121$\,ns & $+10.08$ / $+0.120$\,ns \\
-DRC / LVS / antenna / latches  & 0       & \textbf{0} \\
-\midrule
-\multicolumn{3}{l}{Latency 896 cycles $=$ 17.9\,\textmu s @ 50\,MHz} \\
-\multicolumn{3}{l}{Energy 32.0\,nJ per prediction $\Rightarrow$ 35.1\,\textmu J for 3 meals/day for a year} \\
+Flip-flops                 & 148       & \textbf{168} \\
+Standard cells             & 1330      & \textbf{1443} \\
+Utilisation                & 76.35\,\% & \textbf{83.53\,\%} \\
+Setup slack @ 20\,ns       & $+9.89$\,ns  & $+10.08$\,ns \\
+Hold slack                 & $+0.121$\,ns & $+0.120$\,ns \\
+DRC / LVS / antenna        & 0         & \textbf{0} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 Table~\ref{tab:silicon} gives the implementation result and the guard's
 marginal cost: 20 flip-flops and 113 standard cells, taking utilisation from
-76.35\,\% to 83.53\,\% (Fig.~\ref{fig:layout}). Energy follows from the
+76.35\,\% to 83.53\,\%. At that occupancy the tile is full, which is why the
+second guard was declined rather than built. Energy follows from the
 place-and-route power estimate at the nominal corner and the measured cycle
-count, and therefore inherits the tool's switching-activity assumptions.
+count, so it inherits the tool's switching-activity assumptions.
 
 Verification is 41 top-level tests, all bit-exact against an integer reference
-model, plus 6 unit tests that are \emph{exhaustive} over all 65{,}536 signed
-$8\times8$ multiplier inputs, and 54 of 54 named coverage bins, asserted rather
-than printed. A mutation suite of 29 mutants leaves none escaped: 28 caught, 1
-proven equivalent by the exhaustive multiplier test. Gate-level simulation is
-functional only, without back-annotated delays, so timing rests on static
-analysis alone.
+model, plus 6 that are \emph{exhaustive} over all 65{,}536 signed $8\times8$
+multiplier inputs, and 54 of 54 named coverage bins, asserted rather than
+printed. Of 29 mutants none escape: 28 are caught and 1 is proven equivalent by
+the exhaustive test. Gate-level simulation is functional only, without
+back-annotated delays, so timing rests on static analysis alone.
 
-\begin{figure}[t]
-\centering
-\includegraphics{fig4_layout.pdf}
-\caption{The routed tile, with a 1:1 detail. At 83.53\,\% utilisation the tile
-is visibly full, which is the reason the second guard was declined rather than
-built. 1443 standard cells including 168 flip-flops, zero DRC, LVS and antenna
-violations.}
-\label{fig:layout}
-\end{figure}
+% The layout render was cut here to fit the 5-page limit, not because it was
+% wrong. It is generated by paper/figures/fig4_layout.py and is worth restoring
+% if a venue with more room is ever targeted -- at 83.53 % utilisation the tile
+% is visibly full, which is the whole argument for declining the second guard.
+% Table I already carries every number the render illustrates.
+%
+% \begin{figure}[t]
+% \centering
+% \includegraphics{fig4_layout.pdf}
+% \caption{The routed tile, with a 1:1 detail. At 83.53\,\% utilisation the tile
+% is visibly full, which is the reason the second guard was declined rather than
+% built. 1443 standard cells including 168 flip-flops, zero DRC, LVS and antenna
+% violations.}
+% \label{fig:layout}
+% \end{figure}
 
 \section{Limitations}
 
@@ -519,17 +495,17 @@ A monotonicity guarantee is a property of a weight set, and a device handed a
 new weight set for every patient cannot inherit a certificate computed for
 someone else's. The failure is not hypothetical---an unconstrained per-person
 refit violates the sign condition in 44 of 44 cases---and the precondition is
-checkable at the interface, in hardware, for 20 flip-flops, because both of its
-operands already cross the pins. Such a guarantee can also hold throughout a
-datapath and still be destroyed by the fixed-width field that reports it.
-Concurrent error detection asks whether the hardware computed correctly; this
-asks whether the model it was given admits the guarantee at all, and in the
-failing case the arithmetic is perfectly correct.
+checkable at the interface for 20 flip-flops, because both operands already
+cross the pins. Such a guarantee can also hold throughout a datapath and still
+be destroyed by the fixed-width field that reports it. Concurrent error
+detection asks whether the hardware computed correctly; this asks whether the
+model it was given admits the guarantee at all, and in the failing case the
+arithmetic is perfectly correct.
 
-RTL, testbenches, the mutation suite, reference models and analysis scripts are
-at \url{https://github.com/kush1434/proof}; the figures here are regenerated by
-scripts in \texttt{paper/figures/}. Trained weights are excluded because
-CGMacros is CC~BY-NC-SA while the repository is Apache-2.0.
+RTL, testbenches, reference models and analysis scripts, including the ones
+that regenerate every figure here, are at
+\url{https://github.com/kush1434/proof}. Trained weights are excluded: CGMacros
+is CC~BY-NC-SA and the repository is Apache-2.0.
 
 % Entries 1-7 were checked against the publications themselves on 2026-08-15
 % (author lists, venues, volumes, DOIs). Entry 8 is a tool with no canonical
