@@ -28,17 +28,22 @@ FIGDIR = os.path.join(HERE, "figures", "out")
 PAGE_LIMIT = 5
 COL_H = 9.25        # IEEEtran column height, inches
 
-# CALIBRATED, not guessed. This started at 1050 words/page, which predicted
-# 4.77 pages for a draft that compiled to 6 -- an error large enough to hide a
-# full page over a hard limit, which is the one thing this number exists to
-# catch. Solving the model against that measurement (3584 words, 0.96 pages of
-# floats, 0.36 of references) gives 766. Rounded down to 750 so the estimate
-# errs long rather than short.
+# CALIBRATED against real compiles, not guessed -- and still only a guide.
 #
-# It is one data point. CI compiles the paper and counts the pages for real;
-# treat this only as the fast check that catches a gross overrun before a
-# five-minute round trip.
-WORDS_PER_PAGE = 750
+#   3584 words, 0.96 floats, 0.36 refs -> 6 pages   implies 766 words/page
+#   3309 words, 0.81 floats, 0.36 refs -> 5 pages   implies 864 words/page
+#
+# It began at 1050, which predicted 4.77 for the draft that compiled to 6: an
+# error large enough to hide a whole page over a hard limit, which is the one
+# thing this number exists to catch. But the two measurements disagree by 13 %,
+# because pages are quantised and float placement moves text around in ways no
+# word count models -- the second draft compiled to 5 while this estimator still
+# said 5.58.
+#
+# So: 800, between the two, and the estimate WARNS rather than fails. CI
+# compiles the paper and counts pages with pdfinfo; that is the number that
+# decides. Treat this as the cheap early signal before a five-minute round trip.
+WORDS_PER_PAGE = 800
 CAPTION_IN = 0.55   # allowance per float for its caption
 WIDE_FLOATS = {"fig3_architecture"}
 
