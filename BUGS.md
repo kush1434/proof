@@ -199,12 +199,20 @@ misleading as one that omits uncovered things.
   unless `model/train.py` has been run locally, and its coverage bin is
   exempted when absent. A green CI run does not exercise it.
 - **Model results now use grouped 5-fold cross-validation**, which corrected an
-  earlier single-split claim: monotonicity was reported as costing −0.000 and
-  actually costs −0.036 (95 % CI [−0.059, −0.012]). The single split was a
-  lucky partition. Still open: only one seed sweep per fold, one value of k,
-  and no nested selection.
+  earlier single-split claim that monotonicity was free. The current figure is
+  −0.007 (95 % CI [−0.033, +0.020]) — **no cost detected, which is not the
+  same as no cost**: the interval admits up to 0.033 R², so the study is
+  underpowered to resolve it. Still open: only one seed sweep per fold, one
+  value of k, and no nested selection.
+  *(This entry said −0.036 [−0.059, −0.012] until 2026-08-18. That figure
+  predates the CGMacros plausibility filter and had never been regenerated.)*
 - **The network does not beat the published-style baseline.** XGBoost vs the
-  unconstrained network is −0.048 [−0.098, +0.003] — straddles zero.
+  unconstrained network is −0.059 [−0.118, −0.001]. The interval now barely
+  excludes zero, but nothing here survives correction for the ~10 comparisons
+  made across the project, so this is still **not** a basis for the claim.
+  *(Said −0.048 [−0.098, +0.003] until 2026-08-18 — a third value for the
+  same quantity, RESULTS.md and VERIFICATION.md each having carried a
+  different one. All three are now the measured −0.059.)*
 - **Timing / setup / hold.** STA reports +9.89 ns setup and +0.121 ns hold
   worst slack at a 20 ns period. Gate-level simulation passes but compiles with
   `-DFUNCTIONAL -DSIM` and **no SDF back-annotation**, so it catches synthesis

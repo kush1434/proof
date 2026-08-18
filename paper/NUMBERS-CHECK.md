@@ -7,6 +7,7 @@ this project. Re-run:
 ```
 model/train.py --cv 5     model/clinical.py       model/personalise.py
 model/sign_condition.py   model/width_sweep.py    model/ablation.py     (all new)
+cd test && python run.py --module test_cycles                                (new)
 test/monotonicity.py      paper/figures/find_r4_case.py                 (new)
 ```
 
@@ -16,7 +17,7 @@ All under `.venv-legacy` (Python 3.8, sklearn 0.24.2, xgboost 1.6.2).
 
 ## Verdict
 
-**Most of RESULTS.md reproduces exactly.** Three numbers were stale. Three
+**Most of RESULTS.md reproduces exactly.** Four numbers were stale. Three
 claim clusters had no script at all; writing those three scripts corrected a
 claim in each. Two further statements are narrower than the sheet implies, and
 two references were wrong.
@@ -75,6 +76,22 @@ Probed for nondeterminism directly: 5 repeats in one process give
 unchanged and in fact slightly strengthened — the interval now *barely* excludes
 zero — so "do not claim the network beats the baseline" stands.
 
+The same row had **propagated to two other documents, with two further
+values**. Before 2026-08-18 the identical comparison read:
+
+| document | Δ R² | 95 % CI |
+|---|---|---|
+| RESULTS.md §3 | −0.064 | [−0.121, −0.006] |
+| VERIFICATION.md | −0.064 | [−0.121, −0.006] |
+| BUGS.md | **−0.048** | **[−0.098, +0.003]** |
+| **measured** | **−0.059** | **[−0.118, −0.001]** |
+
+BUGS.md's version straddled zero and was used there to support "the network does
+not beat the baseline." The conclusion survives — nothing survives correction for
+~10 comparisons — but it was resting on a number that no longer existed anywhere
+else. VERIFICATION.md's per-fold row for the same model was stale too (+0.166,
+sd 0.054). All three now carry the measured figure.
+
 ### 2b. §2, §4, §5 — within-participant Spearman
 
 | | RESULTS.md said | actual |
@@ -96,6 +113,39 @@ before/after table, and §5's ablation table.
 (it predated the CGMacros plausibility filter). The advice is right; the number
 is the one it warns against. Now reads −0.007 [−0.033, +0.020], with the reason
 restated as *underpowered*, not *free*.
+
+### 2d. §6 — latency, and the energy figure derived from it
+
+*(found 2026-08-17, after the first pass)*
+
+| | RESULTS.md said | actual |
+|---|---|---|
+| latency | 914 cycles, 18.3 µs @ 50 MHz | **896 cycles, 17.9 µs** |
+| energy per prediction | 32.7 nJ | **32.0 nJ** |
+| energy, 3 meals/day for a year | 35.8 µJ | **35.1 µJ** |
+
+The only trace of where 914 came from was `test/results_test_cycles.xml`, whose
+`file` attribute names a `test/test_cycles.py` that **was never committed** and
+is not on disk — so a number in the paper's silicon table had no producer at
+all, and the energy figure is derived from it.
+
+Re-measured with a new `test/test_cycles.py`: a full 6-8-1 inference takes
+**896 cycles**, deterministically. The 18-cycle gap is fully explained, and the
+new test asserts the explanation: the testbench helper `run_mode_b` reads the
+result register back after *every* neuron, at two cycles each, and nine neurons
+is exactly 18. That is a verification convenience — a deployed host reads only
+the final `y`, since layer 2 takes its activations from `hreg` internally and
+never needs the host to observe them.
+
+So 914 was a real measurement of the wrong thing. Both figures are now asserted
+by tests (`python run.py --module test_cycles`), which also pins that latency is
+data-independent — worth having, because the energy number is
+cycles × power and would otherwise be a mean presented as a constant.
+
+This also needed a small additive change to `test/run.py`: a `--module` flag, so
+the top-level build can run a test module other than `test`. Default behaviour
+is unchanged, and the latency tests stay out of the main suite's runtime, so
+"41 top-level tests" still means what it did.
 
 ---
 
@@ -250,8 +300,10 @@ reconciling in RESULTS.md.
 - `model/sign_condition.py` — **new**, reproduces §1.3.
 - `model/width_sweep.py` — **new**, reproduces §1.2.
 - `model/ablation.py` — **new**, replaces §5's ablation.
+- `test/test_cycles.py` — **new**, measures and pins the latency figure.
+- `test/run.py` — added `--module`; default behaviour unchanged.
 - `RESULTS.md` — the stale numbers above, each marked inline; §1.2 and §5
   replaced with measured tables; the reproduce line now lists every script.
 - `paper/` — figures and their scripts, the draft, `check_tex.py`, this note.
 
-No RTL and no testbench was touched: `src/` and `test/` are clean.
+No RTL was touched: `src/` is clean. In `test/`, only the two additions above — no existing testbench or test was modified.

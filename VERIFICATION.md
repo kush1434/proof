@@ -137,7 +137,7 @@ row split would leak individual response, which is the dominant signal here.
 
 | model | mean R² | sd | per fold |
 |---|---|---|---|
-| depth-1 XGBoost, the notebook's model | +0.166 | 0.054 | +0.21 +0.14 +0.12 +0.11 +0.25 |
+| depth-1 XGBoost, the notebook's model | +0.170 | 0.059 | +0.22 +0.14 +0.12 +0.11 +0.26 |
 | unconstrained MLP 6-8-1 | +0.230 | 0.098 | +0.27 +0.29 +0.10 +0.13 +0.36 |
 | monotone: carbs ↑ | +0.223 | 0.089 | +0.23 +0.31 +0.10 +0.14 +0.33 |
 | monotone: carbs ↑ *and* fibre ↓ | +0.205 | 0.079 | +0.19 +0.26 +0.09 +0.17 +0.32 |
@@ -149,7 +149,15 @@ lower variance than either column:
 |---|---|---|---|
 | carbs ↑ vs unconstrained | −0.007 | [−0.033, +0.020] | no difference |
 | carbs ↑ + fibre ↓ vs unconstrained | −0.025 | [−0.062, +0.013] | no difference |
-| depth-1 XGBoost vs unconstrained | −0.064 | [−0.121, −0.006] | **does not survive** |
+| depth-1 XGBoost vs unconstrained | −0.059 | [−0.118, −0.001] | **does not survive** |
+
+⚠️ **The two XGBoost rows were stale until 2026-08-18** (+0.166 and
+−0.064 [−0.121, −0.006]). Re-running `train.py --cv 5` gives the figures
+above; the baseline is bit-deterministic across repeats, so that was drift from
+an un-regenerated number rather than noise. The reading is unchanged — the
+interval still barely excludes zero and still does not survive correction.
+BUGS.md carried a *third* value for the same comparison; see
+`paper/NUMBERS-CHECK.md`.
 
 **No cost to monotonicity was detected**, and that is a different statement from
 "monotonicity is free". The interval admits a cost up to 0.033 R², so the honest
