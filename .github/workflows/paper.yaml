@@ -122,3 +122,10 @@ jobs:
             echo "::error::$pages pages, limit is 5 including references"
             exit 1
           fi
+          # Sitting exactly on the limit is worth saying out loud. Pages are
+          # quantised, so "5" covers everything from half-empty to one line
+          # short of spilling, and the author block is still a placeholder --
+          # filling it in is the most likely thing to tip it.
+          if [ "$pages" -eq 5 ]; then
+            echo "::warning::at the limit exactly -- any addition may spill to 6"
+          fi

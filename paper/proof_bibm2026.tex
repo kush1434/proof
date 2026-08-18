@@ -111,11 +111,11 @@ offline certificate covers the weight set it was computed for and nothing else.
 
 This paper makes four claims. Per-patient weights are worth having: refitting
 one parameter from about eight logged meals---three days---improves
-per-participant error by a margin excluding zero, while refitting from a single
-meal is measurably \emph{worse} than not personalising at all
-(Fig.~\ref{fig:personalisation}). The precondition really does fail: an
-unconstrained per-person refit violates the sign condition in 44 of 44
-participants. It is nevertheless checkable in hardware, from the weight stream
+per-participant error by a margin whose 95\,\% interval excludes zero, while
+refitting from a single meal is measurably \emph{worse} than not personalising
+at all (Fig.~\ref{fig:personalisation}). Monotonicity's precondition really does
+fail: an unconstrained per-person refit violates the sign condition it rests on
+in 44 of 44 participants. It is nevertheless checkable in hardware, from the weight stream
 itself, for 20 flip-flops, because both operands already cross the pins
 (Fig.~\ref{fig:arch}). And such a property can hold internally while breaking
 at the interface---our datapath was provably monotone while the output field
