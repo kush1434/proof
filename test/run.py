@@ -87,7 +87,7 @@ def plan(args):
         {},
         HERE / "sim_build" / "rtl",
         "tb",
-        "test",
+        args.module,
     )
 
 
@@ -126,6 +126,16 @@ def main():
         "--unit",
         metavar="NAME",
         help="unit-test a submodule: src/NAME.v + test/tb_NAME.v + test/test_NAME.py",
+    )
+    # The top-level build is the same either way; only the module cocotb
+    # collects tests from changes. test_cycles measures inference latency,
+    # which is a different question from correctness and does not belong in
+    # the main suite's runtime.
+    ap.add_argument(
+        "--module",
+        default="test",
+        metavar="NAME",
+        help="test module for the top level (default: test; e.g. test_cycles)",
     )
     args = ap.parse_args()
 

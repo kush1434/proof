@@ -152,7 +152,10 @@ offline, and verifies the network rather than the interface through which it is
 loaded.
 
 \textbf{Concurrent error detection.} Accelerators are commonly protected by
-algorithmic checksums, parity and similar concurrent schemes. The distinction
+algorithmic checksums descended from ABFT~\cite{huang1984}, applied to the
+fully-connected and convolutional layers of DNN accelerators at low
+cost~\cite{ozen2020}, and by schemes targeting permanent faults in the systolic
+arrays such accelerators are built from~\cite{zhang2018}. The distinction
 that matters here is not one of degree. \emph{Concurrent error detection asks
 whether the hardware computed correctly. We ask whether this weight set admits
 the guarantee at all.} In the failing case the arithmetic is perfectly correct
@@ -527,7 +530,7 @@ CGMacros is CC~BY-NC-SA while the repository is Apache-2.0.
 % Entries 1-7 were checked against the publications themselves on 2026-08-15
 % (author lists, venues, volumes, DOIs). Entry 8 is a tool with no canonical
 % paper -- confirm the maintainers' preferred citation form before submitting.
-\begin{thebibliography}{9}
+\begin{thebibliography}{12}
 
 \bibitem{liu2020}
 X. Liu, X. Han, N. Zhang, and Q. Liu, ``Certified monotonic neural networks,''
@@ -551,6 +554,22 @@ Y. Zhang, Z. Zhao, G. Chen, F. Song, M. Zhang, T. Chen, and J. Sun, ``QVIP: An
 ILP-based formal verification approach for quantized neural networks,'' in
 \emph{Proc. 37th IEEE/ACM Int. Conf. Automated Software Engineering (ASE)},
 2022.
+
+\bibitem{huang1984}
+K.-H. Huang and J.~A. Abraham, ``Algorithm-based fault tolerance for matrix
+operations,'' \emph{IEEE Trans. Computers}, vol.~C-33, no.~6, pp.~518--528,
+1984.
+
+% >>> confirm volume and page range against the published JETTA version
+\bibitem{ozen2020}
+E. Ozen and A. Orailoglu, ``Low-cost error detection in deep neural network
+accelerators with linear algorithmic checksums,'' \emph{J. Electronic Testing:
+Theory and Applications}, vol.~36, pp.~703--718, 2020.
+
+\bibitem{zhang2018}
+J.~J. Zhang, T. Gu, K. Basu, and S. Garg, ``Analyzing and mitigating the impact
+of permanent faults on a systolic array based neural network accelerator,'' in
+\emph{Proc. IEEE VLSI Test Symposium (VTS)}, 2018.
 
 \bibitem{xiang2022}
 W. Xiang, ``Runtime safety monitoring of neural-network-enabled dynamical
