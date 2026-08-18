@@ -57,8 +57,11 @@ Three things worth saying:
 
 ### 1.1 One parameter is the right amount
 
-The chip streams all 83 parameters, so more than the bias could be refitted per
-person. The natural next step is an affine calibration `y' = a·y + b` — still
+The chip streams every weight, so more than the bias could be refitted per
+person. (The stream is 83 bytes per inference — 74 weight and bias bytes
+plus 9 requantisation shift bytes — carrying 65 learned parameters. Earlier
+drafts called that "83 parameters", which counts split-bias bytes twice and
+includes control bytes.) The natural next step is an affine calibration `y' = a·y + b` — still
 closed form, still **monotonicity-preserving provided a ≥ 0**, since a
 non-negative scale cannot reorder anything.
 
@@ -344,9 +347,21 @@ Tiny Tapeout IHP 26b, `ihp-sg13g2`, 1×1 tile.
 | Utilisation | 83.53 % |
 | Setup / hold worst slack | +10.08 ns / +0.120 ns @ 20 ns |
 | DRC / LVS / antenna / latches / lint | 0 / 0 / 0 / 0 / 0 |
-| **Latency** | **914 cycles** = 18.3 µs @ 50 MHz, 0.91 ms @ 1 MHz |
-| **Energy per prediction** | **32.7 nJ** |
-| Energy, 3 meals/day for a year | 35.8 µJ |
+| **Latency** | **896 cycles** = 17.9 µs @ 50 MHz, 0.90 ms @ 1 MHz |
+| **Energy per prediction** | **32.0 nJ** |
+| Energy, 3 meals/day for a year | 35.1 µJ |
+
+`test/test_cycles.py` (added 2026-08-17), run with `python run.py --module
+test_cycles`. Energy is that latency times OpenLane's nominal-corner
+`power__total` of 1.787 mW, so it inherits the tool's switching-activity
+assumptions.
+
+⚠️ **Corrected from 914 cycles / 32.7 nJ / 35.8 µJ.** The only surviving trace of
+the 914 figure was `test/results_test_cycles.xml`, naming a `test_cycles.py`
+that was never committed. Re-measured, 914 is the *testbench* path: `run_mode_b`
+reads the result register back after every neuron, which costs two cycles each,
+and nine neurons is exactly the 18-cycle difference. A deployed host reads only
+the final `y`. The new test asserts both numbers, so neither can drift again.
 
 `gds`, `precheck` and `gl_test` all pass. Gate-level simulation is
 **functional only** — `-DFUNCTIONAL -DSIM`, no SDF back-annotation — so timing
