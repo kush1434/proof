@@ -1,0 +1,66 @@
+# Gates for the BIBM submission.
+#
+# There is no LaTeX on the development machine, so the paper cannot be compiled
+# there and every error it would have caught -- an unescaped underscore, a
+# broken \ref, a figure that no longer builds -- survives until it reaches
+# Overleaf. These checks stand in for that compile, and they run on every push
+# so nobody has to remember them.
+#
+# The number check is the important one. Five figures in this project have gone
+# stale by being superseded in one document and left behind in another, and
+# every one was caught late, by a human re-reading. This fails the build
+# instead.
+#
+# Deliberately does NOT re-run the model analyses: those need the CGMacros data,
+# which is not in the repository (CC BY-NC-SA against an Apache-2.0 repo), and
+# take tens of minutes. Regenerating a canonical value stays a local job -- see
+# paper/NUMBERS-CHECK.md.
+
+name: paper
+
+on:
+  push:
+    paths:
+      - "paper/**"
+      - "*.md"
+      - "check_numbers.py"
+      - ".github/workflows/paper.yaml"
+  workflow_dispatch:
+
+jobs:
+  paper:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The checkers themselves are standard library only, on purpose -- a gate
+      # that needs a dependency tree is a gate that rots. matplotlib and Pillow
+      # are only for the figure-rebuild step below.
+      - name: Install figure dependencies
+        run: python -m pip install --quiet matplotlib numpy pillow
+
+      - name: Numbers agree across every document
+        run: python check_numbers.py
+
+      - name: Paper structure, references and length
+        run: python paper/check_tex.py
+
+      - name: Compile blockers LaTeX would catch
+        run: python paper/check_specials.py
+
+      # Not a byte-comparison: matplotlib stamps a creation date into the PDF,
+      # so regenerated output never matches bit for bit. This checks the weaker
+      # but still useful thing -- that every figure script still runs against
+      # the committed data, so a script cannot silently rot away from the
+      # figure it supposedly produces.
+      - name: Every figure still builds from its script
+        run: |
+          for f in paper/figures/fig*.py; do
+            echo "--- $f"
+            python "$f"
+          done
