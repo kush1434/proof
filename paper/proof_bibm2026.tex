@@ -283,8 +283,8 @@ datapath. Instead the guard stores one bit of each: the sign of $W_1[j][c]$ and
 whether it is non-zero, in two 8-bit registers that shift and rotate in
 \emph{lockstep} with the hidden-activation register. Because layer~2 consumes
 hidden activations from the head of that register, the corresponding sign and
-non-zero bits are at the head of theirs at the same moment, and the comparison
-is a single XOR and two ANDs (Fig.~\ref{fig:arch}).
+non-zero bits are at the head of theirs at the same moment, and the comparison is an XOR,
+an eight-input OR reduction and three ANDs (Fig.~\ref{fig:arch}).
 
 Two subtleties are worth stating, since both are directly tested. A unit may
 oppose carbohydrate \emph{twice}---negative on both sides is a non-negative
