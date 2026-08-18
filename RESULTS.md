@@ -285,26 +285,27 @@ values, which is why the reference notebook's breakfast-only scope is a
 `test/golden_float.py`, `model/clinical.py`. Scales selected by search over a
 held-out fold, not by hand.
 
-| configuration | mean error | p95 |
-|---|---|---|
-| original (5,6,6,6,0), uncleaned data | 418 | 1554 |
-| after data cleaning | 172 | 1177 |
-| **selected (5,5,5,5,1)** | **85** | **180** |
+| configuration | mean error | p95 | max |
+|---|---|---|---|
+| original (5,6,6,6,0), uncleaned data | 418 | 1554 | — |
+| after data cleaning | 172 | 1177 | — |
+| **selected (5,5,5,5,1)** | **85** | **180** | **7305** |
 
-**4.9× on the mean and 8.6× on the tail.** Quantisation now costs ~3 % of a
-typical iAUC rather than 14 %. The tail matters more than the mean — that is
-where a wrong answer would reach someone.
+**Two separate effects, and they should be reported separately.** Cleaning the
+data is worth 418 → 172 on the mean; searching the scales is worth a further
+**172 → 85 (2.0×) on the mean and 1177 → 180 (6.5×) on the tail**. Quantisation
+now costs ~3 % of a typical iAUC rather than 14 %. The tail matters more than
+the mean — that is where a wrong answer would reach someone.
 
-⚠️ Two caveats on that sentence (2026-08-15):
+⚠️ Corrected 2026-08-15. This used to read "**4.9× on the mean and 8.6× on the
+tail**", which is 418→85 and 1554→180 — *original scales on uncleaned data*
+against *selected scales on cleaned data*. That bundles the data-cleaning gain
+into a sentence about scale search and roughly doubles the apparent effect of
+the search. `golden_float.py`'s own docstring says 6.5×.
 
-- Those ratios compare *original scales on uncleaned data* against *selected
-  scales on cleaned data*, so they bundle the data-cleaning gain into a claim
-  about scale search. The **scale search alone** is 172 → 85 (2.0×) on the mean
-  and 1177 → 180 (6.5×) on the tail, which is what `golden_float.py`'s docstring
-  says. Report the two effects separately.
-- `clinical.py` also prints **max 7305 mg/dL·min** over the same 265 meals.
-  Giving mean and p95 but not max, while arguing the tail is what matters, is
-  the kind of omission a reviewer notices. The paper states it.
+⚠️ The **max is 7305 mg/dL·min** on a single meal, from the same 265. Reporting
+mean and p95 but not max, while arguing the tail is what matters, is the kind of
+omission a reviewer notices. The paper states it.
 
 **Ablation — per-participant features.** The input count is not fixed in
 silicon, so bio features are free in hardware. They still do not help:

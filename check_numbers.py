@@ -84,6 +84,13 @@ RETIRED = [
     ("76.35",   "83.53",  "utilisation before the guard"),
     ("1330",    "1443",   "standard cells before the guard"),
     ("83 parameters", "65 learned", "byte count mistaken for parameters"),
+    # Not a superseded measurement but a superseded *framing*: 4.9x and 8.6x
+    # are 418->85 and 1554->180, which compare original scales on uncleaned
+    # data against selected scales on cleaned data. That credits the scale
+    # search with the data-cleaning gain and roughly doubles it. The search
+    # alone is 2.0x on the mean and 6.5x on the tail.
+    ("4.9", "2.0", "quantisation mean gain, bundled with data cleaning"),
+    ("8.6", "6.5", "quantisation tail gain, bundled with data cleaning"),
 ]
 
 CORRECTION_MARKERS = (
