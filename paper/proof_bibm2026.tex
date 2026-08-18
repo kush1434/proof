@@ -351,14 +351,12 @@ near five meals. At eight---roughly three days of logging---the paired
 improvement is $-150$ [$-285$, $-16$] mg/dL$\cdot$min, with 32 of 44
 participants improved, and pooled $R^2$ reaches $+0.307$.
 
-One parameter is the right number. An affine calibration $y' = ay + b$ is still
-closed-form and still monotonicity-preserving provided $a \geq 0$, but at $k=2$
-it is 1870 mg/dL$\cdot$min \emph{worse} than bias-only, and buys only 40--75 at
-larger $k$ against an error near 1700. It is also a clean illustration of why
-the constraint is not academic: at $k=2$ the fitted slope had to be clamped at
-zero for 18 of 44 participants, meaning an unconstrained least-squares
-calibration would have returned a negative slope and silently inverted the
-model for 41\,\% of them.
+One parameter is the right number. An affine calibration $y' = ay + b$ stays
+closed-form and monotonicity-preserving provided $a \geq 0$, but at $k=2$ it is
+1870 mg/dL$\cdot$min \emph{worse} than bias-only. It also shows the constraint
+is not academic: at $k=2$ the fitted slope had to be clamped at zero for 18 of
+44 participants, so an unconstrained least-squares calibration would have
+returned a negative slope and silently inverted the model for 41\,\% of them.
 
 \subsection{The precondition fails in practice}
 

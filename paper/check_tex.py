@@ -120,8 +120,13 @@ def main():
     print(f"  floats ({ntab} table)     {floats:.2f} pages")
     print(f"  references ({len(bibs)})     {refs:.2f} pages")
     print(f"  ESTIMATED TOTAL     {total:.2f} of {PAGE_LIMIT} pages")
+    # WARNS, does not fail. CI compiles the paper and counts the pages for real,
+    # and an estimate must never gate a measurement -- when this did fail the
+    # build, it aborted the run before the compile step and left nobody able to
+    # find out the true page count. The real limit is enforced against pdfinfo.
     if total > PAGE_LIMIT:
-        problems.append(f"estimated {total:.2f} pages, limit is {PAGE_LIMIT}")
+        print(f"  WARNING: over the {PAGE_LIMIT}-page limit by "
+              f"{total - PAGE_LIMIT:.2f} -- the compile step has the real number")
 
     print()
     if problems:
