@@ -362,7 +362,8 @@ the 914 figure was `test/results_test_cycles.xml`, naming a `test_cycles.py`
 that was never committed. Re-measured, 914 is the *testbench* path: `run_mode_b`
 reads the result register back after every neuron, which costs two cycles each,
 and nine neurons is exactly the 18-cycle difference. A deployed host reads only
-the final `y`. The new test asserts both numbers, so neither can drift again.
+the final `y`. `test/test_cycles.py` asserts both numbers and the `test` workflow runs it
+on every push, so neither can drift again.
 
 `gds`, `precheck` and `gl_test` all pass. Gate-level simulation is
 **functional only** — `-DFUNCTIONAL -DSIM`, no SDF back-annotation — so timing

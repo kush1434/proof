@@ -142,10 +142,18 @@ by tests (`python run.py --module test_cycles`), which also pins that latency is
 data-independent — worth having, because the energy number is
 cycles × power and would otherwise be a mean presented as a constant.
 
-This also needed a small additive change to `test/run.py`: a `--module` flag, so
-the top-level build can run a test module other than `test`. Default behaviour
-is unchanged, and the latency tests stay out of the main suite's runtime, so
-"41 top-level tests" still means what it did.
+This needed a small additive change to `test/run.py`: a `--module` flag, so the
+top-level build can run a module other than `test`. Default behaviour is
+unchanged, and the latency tests stay out of `COCOTB_TEST_MODULES`, so "41
+top-level tests" still means what it did.
+
+⚠️ **That last claim was briefly false and is worth recording.** When first
+written, `test_cycles.py` was not run by anything: the `test` workflow drives
+the template Makefile, which has `COCOTB_TEST_MODULES = test`, so the
+assertions existed but never executed. This file said "both figures are now
+asserted by tests" while nothing ran them — the same failure as the number it
+was written to fix, one level up. The `test` workflow now has an explicit
+`Inference latency` step.
 
 ---
 

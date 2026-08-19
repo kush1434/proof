@@ -40,6 +40,17 @@ jobs:
           cd test
           python run.py --unit mac_serial
 
+      # Inference latency. Kept out of COCOTB_TEST_MODULES so the main suite
+      # stays at 41 tests and its runtime does not grow, but it has to run
+      # somewhere: RESULTS.md quotes 896 cycles and derives the 32.0 nJ energy
+      # figure from it, and the previous latency number survived for months in
+      # a document because the test that produced it was never committed.
+      # test_cycles asserts the figure, so this step is what makes that true.
+      - name: Inference latency
+        run: |
+          cd test
+          python run.py --module test_cycles
+
       # Mutation testing. A green suite proves nothing until it can go red, and
       # a harness left out of CI rots. This also re-runs the two self-tests --
       # the CRLF-safe did-not-apply guard, and the check that run.py can report
