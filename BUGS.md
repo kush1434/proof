@@ -10,7 +10,7 @@ Python 3.8 (`.venv-legacy`, CGMacros baseline only).
 
 ```bash
 cd test
-python run.py                    # whole design, RTL      (41 tests)
+python run.py                    # whole design, RTL      (43 tests)
 python run.py --unit mac_serial  # submodule unit test    (6 tests)
 python run.py --gates            # post-layout netlist (needs PDK_ROOT)
 ./mutate.sh                      # mutation testing       (29 mutants)
@@ -61,7 +61,7 @@ about whether the thing could be made. That is now covered by `./lint.sh` as a
 pre-push gate rather than by waiting for CI.
 
 As of 2026-08-14 **both modes are complete**: `mac_serial`, `accumulator`,
-`proof_core` and the pin wrapper. It passes 41 top-level tests and 6 unit tests, every
+`proof_core` and the pin wrapper. It passes 43 top-level tests and 6 unit tests, every
 functional one compared **bit-exactly** against `test/golden_quant.py`.
 
 `mac_serial` is additionally verified **exhaustively** — all 65,536 signed 8×8
@@ -227,9 +227,17 @@ misleading as one that omits uncovered things.
   host simply stops streaming. Only `N_HIDDEN` would need an RTL change, and
   only before tapeout.
 - **Host-side quantisation is trusted.** The chip accepts whatever shift byte
-  and INT8 scaling the host chose. Nothing on-chip validates that a shift is
-  sensible; a shift >= 24 simply replicates the sign bit. Well-defined,
-  untested.
+  and INT8 scaling the host chose, and nothing on-chip validates that a shift is
+  *sensible*. That is still true and still deliberate -- the guard checks the
+  weights' sign condition, not the host's numeric taste.
+  What is no longer true is "untested": the shift field is 5 bits, the
+  randomised streams only drew 0..15, and 16..31 had never been simulated.
+  `test_shift_sweep_full_range` now sweeps all 32 values against the reference
+  with both signs of accumulator, and `test_mode_b_large_requantisation_shifts`
+  does the same for s1/s2 past the accumulator width. Both pass, so the
+  sign-replication behaviour above 23 is confirmed rather than assumed --
+  a disagreement there between Verilog's `>>>` and Python's `>>` would have been
+  invisible to every other test while being reachable by any host.
 - **Coverage is functional, not structural.** 54 named bins, all hit, but there
   is no line, toggle or FSM-state coverage — Icarus does not produce it. A bin
   model only covers situations someone thought to name.

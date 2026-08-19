@@ -7,7 +7,7 @@ verified is listed as not verified, rather than left unmentioned.
 
 ```bash
 cd test
-python run.py                    # whole design, RTL        (41 tests)
+python run.py                    # whole design, RTL        (43 tests)
 python run.py --unit mac_serial  # multiplier, exhaustive   (6 tests)
 python run.py --gates            # post-layout netlist      (needs PDK_ROOT)
 python monotonicity.py           # the safety property study
@@ -231,7 +231,7 @@ and are deliberately not committed. A green CI run does not exercise it.
 exactly**, and every functional test compares against it rather than against
 hand-computed expected values.
 
-- 41 top-level tests, both modes, all bit-exact.
+- 43 top-level tests, both modes, all bit-exact.
 - Semantics are chosen so the two cannot drift: Python's `>>` on a negative int
   floors, which is precisely what Verilog's `>>>` does on a signed value, so
   requantisation is bit-exact with no correction on either side. Saturation is

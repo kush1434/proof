@@ -28,7 +28,7 @@ seniors).
 
 | | |
 |---|---|
-| Tests | 41 top-level + 6 unit (exhaustive over all 65,536 multiplier inputs) + 3 latency |
+| Tests | 43 top-level + 6 unit (exhaustive over all 65,536 multiplier inputs) + 3 latency |
 | Mutation | 29 mutants — 28 caught, 1 proven equivalent, **0 escaped** |
 | Coverage | **54/54** named bins, asserted not printed |
 | Silicon | 168 flops, 1443 cells, **83.53 %** utilisation |

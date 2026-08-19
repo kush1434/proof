@@ -22,8 +22,10 @@
 % >>> STILL OPEN:
 % >>>   - the author block is a placeholder (authorship undecided)
 % >>>   - \bibitem{tinytapeout} has no canonical paper; confirm the form
-% >>>   - length is estimated, not compiled: run paper/check_tex.py, then
-% >>>     check the real page count on the first Overleaf build
+% >>> The paper compiles in CI (the `paper` workflow) to exactly 5 pages, with
+% >>> zero overfull boxes and no undefined references. Download the PDF from any
+% >>> green run. Sitting on the limit exactly, filling in the author block is the
+% >>> likeliest thing to spill it to 6 -- CI warns when it lands on 5.
 
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
@@ -437,7 +439,7 @@ second guard was declined rather than built. Energy follows from the
 place-and-route power estimate at the nominal corner and the measured cycle
 count, so it inherits the tool's switching-activity assumptions.
 
-Verification is 41 top-level tests, all bit-exact against an integer reference
+Verification is 43 top-level tests, all bit-exact against an integer reference
 model, plus 6 that are \emph{exhaustive} over all 65{,}536 signed $8\times8$
 multiplier inputs, and 54 of 54 named coverage bins, asserted rather than
 printed. Of 29 mutants none escape: 28 are caught and 1 is proven equivalent by

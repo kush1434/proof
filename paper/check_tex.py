@@ -81,6 +81,19 @@ def main():
     if "\t" in src:
         problems.append("source contains a TAB -- check for a mangled \\t... macro")
 
+    # Exactly one copy of the paper may exist. A second one got committed at the
+    # repository root when a `cp` in a self-test landed there after a working
+    # directory reset, and `git add -A` swept it in: a stale snapshot, still
+    # carrying a LaTeX error that had already been fixed, sitting where someone
+    # would plausibly open it. Nothing built it, so nothing complained.
+    root = os.path.dirname(HERE)
+    strays = [p for p in (os.path.join(root, os.path.basename(TEX)),)
+              if os.path.exists(p)]
+    for p in strays:
+        problems.append("a second copy of the paper exists at %s -- "
+                        "only paper/ is built, so that one is already stale"
+                        % os.path.relpath(p, root))
+
     print("figures")
     floats = 0.0
     try:

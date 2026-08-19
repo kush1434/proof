@@ -41,7 +41,7 @@ jobs:
           python run.py --unit mac_serial
 
       # Inference latency. Kept out of COCOTB_TEST_MODULES so the main suite
-      # stays at 41 tests and its runtime does not grow, but it has to run
+      # stays at 43 tests and its runtime does not grow, but it has to run
       # somewhere: RESULTS.md quotes 896 cycles and derives the 32.0 nJ energy
       # figure from it, and the previous latency number survived for months in
       # a document because the test that produced it was never committed.

@@ -194,6 +194,51 @@ async def test_negative_weights(dut):
         await check_stream(dut, pairs, shift)
 
 
+@cocotb.test()
+async def test_shift_sweep_full_range(dut):
+    """Every legal shift, 0..31, bit-exact against the reference.
+
+    `shift` is a SHIFT_W = 5 bit field, so an untrusted host may send any value
+    from 0 to 31. The randomised streams draw from 0..15, which is what hits the
+    "large" coverage bin, so 16..31 had never been simulated at all.
+
+    Above 23 the whole 24-bit accumulator is shifted out and only sign bits are
+    left. Verilog's `>>>` and Python's `>>` are both defined there and both
+    replicate the sign -- but that agreement was assumed, never checked, and a
+    disagreement would be invisible to every other test in this file while being
+    reachable by any host that sends a large shift byte. The chip already
+    refuses to trust the host's weights; this is the one input it still takes on
+    faith, so the least it can do is behave as specified.
+
+    Both signs of accumulator are swept, because sign replication is exactly
+    where they diverge: a positive accumulator shifts down to 0, a negative one
+    to -1.
+    """
+    await setup(dut)
+    for pairs in ([(100, 100), (-50, 70)],      # positive accumulator
+                  [(-100, 100), (50, 70)]):     # negative accumulator
+        for shift in range(32):
+            await check_stream(dut, pairs, shift)
+
+
+@cocotb.test()
+async def test_mode_b_large_requantisation_shifts(dut):
+    """Layer shifts past the accumulator width, in Mode B.
+
+    Same gap as above on the two-layer path: the randomised Mode B streams draw
+    s1 and s2 from 0..8. A large s1 drives every hidden activation to the ReLU
+    floor, so the output collapses to the layer-2 bias -- well-defined, and
+    worth pinning, since it is the degenerate case a badly chosen host scale
+    lands in.
+    """
+    await setup(dut)
+    W1 = [[100] * 6 for _ in range(gold.N_HIDDEN)]
+    W2 = [[100] * gold.N_HIDDEN + [50, 7]]
+    x = [100] * 6
+    for s1, s2 in ((24, 0), (31, 0), (0, 24), (0, 31), (31, 31), (16, 16)):
+        await check_mode_b(dut, l1_from(W1, x), W2, s1=s1, s2=s2)
+
+
 # ------------------------------------------------------ category boundaries -
 
 
