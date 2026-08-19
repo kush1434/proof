@@ -59,9 +59,14 @@ checkers run ahead of the compile as a fast signal:
 
 | check | catches |
 |---|---|
-| `paper/check_tex.py` | environments, `\ref`/`\cite` resolution, missing figures, length |
-| `paper/check_specials.py` | unescaped `_` and `%` outside math, math imbalance, tabular column mismatch |
+| `paper/check_tex.py` | environments, `\ref`/`\cite` resolution, missing figures, length, **a second copy of the paper** |
+| `paper/check_specials.py` | unescaped `_` and `%` outside math, math imbalance, tabular columns, a line break followed by `[` |
 | `check_numbers.py` | any document quoting a figure that has since been superseded |
+
+That last `check_tex.py` rule exists because a stale duplicate of the paper once
+sat at the repository root, tracked, still carrying a LaTeX error that had
+already been fixed in `paper/`. Nothing built it, so nothing complained. **Only
+`paper/proof_bibm2026.tex` is real.**
 
 The workflow also rebuilds every figure from its script, so a script cannot rot
 away from the figure it supposedly produces. None of the three needs anything
@@ -139,6 +144,11 @@ reviewer who re-runs `model/sign_condition.py` will see this immediately.
 
 - **Windows.** No `make` — use `test/run.py`, not the template Makefile.
   `python run.py --module test_cycles` runs the latency tests.
+- **The working directory resets between tool calls.** This cost real time
+  tonight: a `cd paper && ...` silently did nothing, a `cp` landed a stray copy
+  of the paper at the repository root and `git add -A` committed it, and a
+  supposedly cached run re-ran everything for twenty minutes. Use absolute
+  paths, or `cd` inside the same command.
 - **yosys** lives at `~/.apio/packages/oss-cad-suite`; put **bin *and* lib** on
   PATH or it dies loading DLLs. `./lint.sh` handles this.
 - **Always run `./lint.sh` before pushing.** It catches unsynthesisable RTL that
@@ -210,12 +220,33 @@ Two older lessons, still live:
 
 ## What is left
 
+**Technical, and the RTL freezes at submission — so it is now or never:**
+
+1. **SDF back-annotated gate-level simulation.** The GL run compiles
+   `-DFUNCTIONAL -DSIM` with no timing, so setup and hold rest on STA alone, and
+   the paper's Limitations says so. The GDS flow emits SDF; wiring it in would
+   upgrade the timing claim from asserted to simulated. **Biggest remaining
+   verification gap, and the only open item that changes what the paper can
+   claim.**
+2. **Only `DW = 8` and `N_HIDDEN = 8` are verified.** Both are parameters; no
+   other value has ever been simulated, and the M2 equivalence argument is
+   specific to `DW = 8`.
+3. **The quantisation error bound is measured but not chosen** — 0.6 % median,
+   2.8 % p95. Not code. `BUGS.md` is explicit that picking it is a judgement
+   with a safety argument attached and belongs to the owner.
+4. **Structural coverage.** 54 functional bins, all hit, but no line, toggle or
+   FSM coverage — Icarus does not emit it. Verilator could.
+
+`BUGS.md` "Areas deliberately not covered" is the full, honest list; the four
+above are the ones still worth acting on.
+
 **Kush's to do:**
 
 - Fill in the author block; decide authorship. An adult co-author is allowed and
   must not be primary contributor, but **cannot present in his place**; the rule
   names a *student* author.
-- Compile the paper on Overleaf and check the real page count.
+- Confirm the `\bibitem{tinytapeout}` citation form — the only unverified
+  reference.
 - Enable GitHub Pages (Source → "GitHub Actions") if he wants the viewer.
 - **Submit to Tiny Tapeout.** RTL freezes there.
 - Decide on Dallas, 1–4 December. In-person only, no virtual option, and a
