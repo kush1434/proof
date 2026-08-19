@@ -140,23 +140,25 @@ than input--output monotonicity, an offline norm-based certificate, and no
 hardware. Formal verification of quantized networks~\cite{qvip2022} is likewise
 offline, and verifies the network rather than the interface it arrives through.
 
-\textbf{Concurrent error detection.} Accelerators are commonly protected by
+\textbf{Hardware that inspects weights.} Accelerators are commonly protected by
 algorithmic checksums descended from ABFT~\cite{huang1984}, applied to DNN
 layers at low cost~\cite{ozen2020}, and by schemes targeting permanent faults
-in systolic arrays~\cite{zhang2018}. The distinction that matters here is not
-one of degree. \emph{Concurrent error detection asks whether the hardware
-computed correctly. We ask whether this weight set admits the guarantee at
-all.} In the failing case the arithmetic is perfectly correct and every output
-is bit-exact against the integer reference model; nothing a checksum can see is
-wrong. Run-time safety monitoring~\cite{xiang2022} is closer in spirit but
-operates at system level, in software, on \emph{outputs}, not on a precondition
-over incoming weights.
+in systolic arrays~\cite{zhang2018}. Closest to us in mechanism, SoftSNN bounds
+incoming weight \emph{magnitudes} against a threshold in hardware~\cite{putra2022}.
+The distinction is not one of degree. Those techniques ask whether a value was
+\emph{corrupted}; we ask whether an intact weight set \emph{admits the guarantee
+at all}. In our failing case nothing is corrupted, the arithmetic is perfectly
+correct, every output is bit-exact against the integer reference model, and the
+condition that fails is a relation \emph{between} two weights arriving in
+different layers---which no per-weight bound or checksum can express. Run-time
+safety monitoring~\cite{xiang2022} is closer in spirit but operates at system
+level, in software, on \emph{outputs}.
 
 To our knowledge no prior hardware checks a semantic precondition on a streamed
-weight set at its own interface. That rests on four targeted literature
+weight set at its own interface. That rests on five targeted literature
 searches, which is weak evidence; we state it as a limitation of the search
-rather than as priority, and regard the concurrent-error and
-run-time-monitoring literatures as the nearest neighbours.
+rather than as priority, and regard weight-bounding and run-time monitoring as
+the nearest neighbours.
 
 \begin{figure}[t]
 \centering
@@ -547,6 +549,11 @@ Theory and Applications}, vol.~36, pp.~703--718, 2020.
 J.~J. Zhang, T. Gu, K. Basu, and S. Garg, ``Analyzing and mitigating the impact
 of permanent faults on a systolic array based neural network accelerator,'' in
 \emph{Proc. IEEE 36th VLSI Test Symposium (VTS)}, 2018.
+
+\bibitem{putra2022}
+R.~V.~W. Putra, M.~A. Hanif, and M. Shafique, ``SoftSNN: Low-cost fault
+tolerance for spiking neural network accelerators under soft errors,'' in
+\emph{Proc. 59th ACM/IEEE Design Automation Conference (DAC)}, 2022.
 
 \bibitem{xiang2022}
 W. Xiang, ``Runtime safety monitoring of neural-network-enabled dynamical

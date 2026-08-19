@@ -106,8 +106,11 @@ literature: **CED asks "did the hardware compute correctly?" This asks "does
 this weight set admit the guarantee at all?"** In the failing case the
 arithmetic is correct and the output is bit-exact against the reference.
 
-Related work checked across four angles on 2026-08-15 — nothing collides.
-`RESULTS.md` §9 has the table and the nearest neighbours. **Four searches is
+Related work checked across five angles (four on 2026-08-15, one on 2026-08-18)
+— nothing collides. The fifth found the closest hardware neighbour yet, SoftSNN
+(DAC 2022), which bounds weight magnitudes in hardware against soft errors; the
+paper cites it and draws the distinction.
+`RESULTS.md` §9 has the table and the nearest neighbours. **Five searches is
 weak evidence; phrase novelty as "to our knowledge" and mean it.**
 
 ⚠️ **State §1.3 precisely.** An unconstrained fit never satisfies the sign

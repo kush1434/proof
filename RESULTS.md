@@ -436,7 +436,8 @@ further is a 1×2 tile conversation.
 
 ## 9. Related work, and what is actually new
 
-Checked 2026-08-15 across four independent angles. **Nothing found collides**,
+Checked 2026-08-15 across four independent angles, and a fifth on 2026-08-18.
+**Nothing found collides**,
 but the surviving claim is narrow and must be stated as such.
 
 ### Established — cite, do not claim
@@ -449,6 +450,7 @@ but the surviving claim is narrow and must be stated as such.
 | Quantization destroying structural guarantees | *Quantization Robustness of Monotone Operator Equilibrium Networks*, 2026 | Closest hit, and still distinct: **monotone-operator** theory rather than input-output monotonicity, an **offline** certificate (‖ΔW‖₂ < m), and **no hardware**. |
 | Quantized-network verification | QVIP; SMT-based model checking of QNNs | Offline, and verifies the network — not the pin interface. |
 | Concurrent error detection in accelerators | algorithmic checksums; parity CED; uncertainty fingerprints; monitor placement | **These detect faults.** They ask "did the hardware compute correctly?" |
+| Hardware that inspects incoming weights | **SoftSNN** (Putra, Hanif & Shafique, DAC 2022) bounds weight *magnitudes* against a threshold in hardened logic | **The closest hardware neighbour found, and still distinct.** Its threat model is soft errors — is this value *corrupted*? Ours is an untrusted host, with the weights perfectly intact. And the sign condition is a relation *between* two weights in different layers, which no per-weight bound can express. Cite it: a reviewer from the fault-tolerance community will think of it immediately. |
 | Runtime safety monitoring | *Run-Time Safety Monitoring of NN-Enabled Dynamical Systems* | System-level, software, monitors **outputs** — not a precondition on weights. |
 
 ### The gap, stated precisely
@@ -474,7 +476,7 @@ nothing in the CED literature, can tell.
 
 ### Honesty about the search
 
-Four targeted searches found no prior hardware checking a semantic precondition
+Five targeted searches found no prior hardware checking a semantic precondition
 on streamed weights. That is **weak evidence** — phrase it as "to our knowledge"
 and mean it, and treat the CED and runtime-monitoring literature as the nearest
 neighbours a reviewer will reach for.
@@ -495,8 +497,8 @@ neighbours a reviewer will reach for.
 - ❌ "The truncation bug endangers patients." Not reachable on real data.
 - ❌ "We invented monotonic networks." Established field — cite Liu et al.
   (NeurIPS 2020), Runje & Shankaranarayana (ICML 2023).
-- ⚠️ "To our knowledge" is doing real work in the guard claim. **Four** targeted
-  searches (§9, 2026-08-15) found no prior hardware that checks a monotonicity
-  precondition at its own interface, but absence of evidence in four searches is
-  weak. Phrase it as a limitation of the search, not as established priority.
+- ⚠️ "To our knowledge" is doing real work in the guard claim. **Five** targeted
+  searches (§9, the fifth on 2026-08-18) found no prior hardware that checks a
+  monotonicity precondition at its own interface, but absence of evidence in five
+  searches is still weak. Phrase it as a limitation of the search, not as established priority.
   *(This bullet said "two"; §9 and HANDOFF both say four.)*
