@@ -181,11 +181,22 @@ after every neuron, which a deployed host does not do. 896 is the device.
 script is re-run before the number is quoted anywhere.** That is now true of
 every table. Keep it true — a table without a script is already drifting.
 
-`check_numbers.py` enforces the weaker half of that rule mechanically: it holds
-the current value of each load-bearing figure and every value it used to have,
-and fails if any document still quotes a retired one. It cannot tell you a
-*canonical* value has itself gone stale — only a re-run does that — so it is a
-floor, not a substitute.
+Two tools enforce that rule mechanically, and they cover different halves of it:
+
+- **`check_numbers.py`** — fast, in CI, no dependencies. Holds the current value
+  of each load-bearing figure and every value it used to have, and fails if any
+  document still quotes a retired one. Catches *propagation*: a figure corrected
+  in one file and left behind in another. It cannot tell you a canonical value
+  has itself gone stale.
+- **`verify_numbers.py`** — slow, local only. Re-runs the analyses, pulls each
+  headline number from their output and the same number from RESULTS.md, and
+  fails on disagreement. Catches *drift*: the pipeline moving out from under the
+  sheet. Cannot run in CI, because CGMacros is not in the repository. Expected
+  values are read from RESULTS.md rather than duplicated, so editing the sheet
+  automatically re-points the check.
+
+Both are self-tested against injected faults, including the case that matters
+most: a pattern that stops matching fails loudly rather than silently passing.
 
 Two older lessons, still live:
 

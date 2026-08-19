@@ -11,6 +11,13 @@ Every table below now names a script that produces it. That was not true before
 2026-08-15 — §1.2, §1.3 and §5 had none — and writing the three missing ones
 corrected a claim in each. See `paper/NUMBERS-CHECK.md`.
 
+**Or check the whole sheet at once:** `python verify_numbers.py` re-runs the
+analyses, pulls each headline number out of their output, pulls the same number
+out of *this file*, and fails on any disagreement. It reads the expected values
+from here rather than holding its own copy, so there is one source of truth.
+Local only — it needs `.venv-legacy` and the CGMacros CSVs, neither of which CI
+has. `--no-run` re-checks cached output in under a second.
+
 ---
 
 ## 1. Headline: personalisation needs about eight meals
