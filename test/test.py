@@ -40,7 +40,18 @@ UNTRUSTED = 1 << 6
 SAT = UNTRUSTED  # legacy alias: Mode A has no monotonicity notion
 BUSY = 1 << 7
 
-CLK_NS = 10
+CLK_NS = int(os.environ.get("PROOF_CLK_NS", "10"))
+
+# How long after a clock edge the outputs are sampled. 1 ns is plenty for the
+# RTL and for the functional gate-level run, where the answer is ready in the
+# same time step. It is not enough once the netlist carries back-annotated
+# delays: at the slow corner the chip takes ~2.0 ns to drive its pins, so a
+# read at 1 ns returns the *previous* cycle's value and the failures look like
+# logic bugs rather than a sampling mistake. The SDF job raises this; the
+# default is unchanged, so every existing run behaves exactly as before.
+# `test_sdf.py` measures the real clock-to-output time and asserts this covers
+# it, so the number cannot quietly go stale.
+SETTLE_NS = float(os.environ.get("PROOF_SETTLE_NS", "1"))
 
 # Overridable so mutate.sh can sweep seeds and report how many of them catch
 # each mutant. On the CNN accelerator that number was the whole argument for
@@ -56,7 +67,7 @@ N_RANDOM_STREAMS = int(os.environ.get("PROOF_STREAMS", "30"))
 
 
 async def settle():
-    await Timer(1, unit="ns")
+    await Timer(SETTLE_NS, unit="ns")
 
 
 def flags(dut):

@@ -32,16 +32,30 @@ seniors).
 | Mutation | 29 mutants — 28 caught, 1 proven equivalent, **0 escaped** |
 | Coverage | **54/54** named bins, asserted not printed |
 | Silicon | 168 flops, 1443 cells, **83.53 %** utilisation |
-| Timing | setup +10.08 ns, hold +0.120 ns @ 20 ns |
+| Timing | setup +10.08 ns, hold +0.120 ns @ 20 ns (STA — still the only thing that checks these) |
+| Gate level | 43/43 functional (CI). SDF back-annotated: 43/43 at all three corners **measured locally only** — see the warning below |
 | Latency | **896 cycles** = 17.9 µs @ 50 MHz, **32.0 nJ** per prediction |
 | Signoff | 0 DRC / 0 LVS / 0 latches / 0 lint / 0 antenna |
-| `gds`, `precheck`, `gl_test` | pass |
+| `gds`, `precheck`, `gl_test`, `viewer` | pass |
+| `gl_test_sdf` | **never run in CI** — the job exists only in the working tree |
 
-`viewer` fails **only** because GitHub Pages is not enabled. Fix: repo
-Settings → Pages → **Source: "GitHub Actions"** (currently "Deploy from a
-branch"). That is Kush's call — it publishes a page. The paper does **not**
-depend on it: the layout figure was built from the `gds_render` workflow
-artifact instead.
+⚠️ **Read this before quoting the SDF numbers.** The whole of the SDF
+back-annotation work — `test/sdf_prep.py`, `test/test_sdf.py`, the
+`gl_test_sdf` job, and the RESULTS.md §6.1 figures including the 1975 ps
+clock-to-output — exists **only in the working tree**. `HEAD` is `31890ed` and
+every green run is at that commit, i.e. before any of it. The three-corner
+result was measured on the development machine via `test/run.py`, with Icarus
+14 from oss-cad-suite; CI uses Icarus 13 and has never run the job. Treat
+§6.1 as measured-but-not-reproduced until a green `gl_test_sdf` exists.
+*(This table said `gl_test_sdf | pass` on 2026-08-19. It had never run. Work
+that exists only on disk has not been verified — the same rule that caught the
+stale latency figure.)*
+
+`viewer` **passes** as of the 2026-08-19 run — all four `gds` jobs are green.
+*(This paragraph said it fails because GitHub Pages is not enabled, and that
+it was Kush's call to enable. That is no longer true; verify against the run
+rather than this file.)* The paper does **not** depend on it: the layout figure
+was built from the `gds_render` workflow artifact instead.
 
 ---
 
@@ -142,8 +156,27 @@ reviewer who re-runs `model/sign_condition.py` will see this immediately.
 
 ## Environment traps
 
-- **Windows.** No `make` — use `test/run.py`, not the template Makefile.
+- **Windows.** Use `test/run.py`, not the template Makefile.
   `python run.py --module test_cycles` runs the latency tests.
+  *(Corrected 2026-08-19: this said "no `make`". There is one, at
+  `/c/msys64/ucrt64/bin/mingw32-make`, and it is worth knowing about because it
+  is the only way to check a Makefile edit locally — it does reach the compile
+  step, which is enough to verify flags. It then dies in the `vvp` rule on
+  Windows path mangling, so it cannot actually run a simulation. `run.py`
+  still is the local runner.)*
+- **Icarus 12 cannot do gate-level timing, and fails silently at it.** It
+  rounds every SDF delay to a whole time unit, so all 4649 sub-nanosecond cell
+  delays become zero, and it never drives the sg13g2 models' `delayed_*` nets,
+  so every flop sits at X. Two builds are on this machine and only one is
+  usable: `~/.apio/packages/oss-cad-suite/bin/iverilog` is **14.0** (use this,
+  and put **bin and lib** on PATH); `Downloads/Installers & Software/Dev
+  Tools/iverilog` is **12.0** (do not). CI installs Tiny Tapeout's **13.0**
+  build, which behaves like 14 here.
+- **cocotb renders a string define with quotes around it.** `defines={"X":
+  "1.0"}` becomes `-DX="1.0"`, so `` assign #(`X) `` is a string literal used
+  as a delay: it compiles, it runs, and the whole design goes to X with no
+  diagnostic. Pass a `float`. This cost an hour — the symptom is 43 of 43
+  failing while the identical file, preprocessed by hand, passes.
 - **The working directory resets between tool calls.** This cost real time
   tonight: a `cd paper && ...` silently did nothing, a `cp` landed a stray copy
   of the paper at the repository root and `git add -A` committed it, and a
@@ -222,12 +255,26 @@ Two older lessons, still live:
 
 **Technical, and the RTL freezes at submission — so it is now or never:**
 
-1. **SDF back-annotated gate-level simulation.** The GL run compiles
-   `-DFUNCTIONAL -DSIM` with no timing, so setup and hold rest on STA alone, and
-   the paper's Limitations says so. The GDS flow emits SDF; wiring it in would
-   upgrade the timing claim from asserted to simulated. **Biggest remaining
-   verification gap, and the only open item that changes what the paper can
-   claim.**
+1. ~~**SDF back-annotated gate-level simulation.**~~ **Done 2026-08-19, as far
+   as this toolchain allows.** The 43 tests now run against the flow's own
+   post-route SDF at all three corners and pass, with zero SDF diagnostics —
+   `gl_test_sdf` in `gds.yaml`, `test/sdf_prep.py`, `test/test_sdf.py`,
+   RESULTS.md §6.1.
+
+   **What did not change: setup and hold are still STA's word alone.** Icarus
+   implements no timing checks in any version and says so itself, so the SDF's
+   168 TIMINGCHECK blocks and the cell models' `$setuphold`/`$recrem`/`$width`
+   are inert. Closing that needs a *different simulator*, not more work here —
+   and no free one with timing-check support was found. **Do not let the paper
+   say setup and hold were simulated.** It now says the netlist passes with
+   back-annotated delays and that setup/hold rest on static analysis, which is
+   the true and slightly weaker claim.
+
+   Worth knowing: it found two testbench defects (BUGS.md **TB-6**, **TB-7**)
+   that no RTL or functional gate-level run could have found, because both were
+   assumptions that held only while nothing took time — pins driven in the same
+   time step as the clock edge, and outputs sampled 1 ns after it when the chip
+   needs 1975 ps. Neither is a chip defect.
 2. **Only `DW = 8` and `N_HIDDEN = 8` are verified.** Both are parameters; no
    other value has ever been simulated, and the M2 equivalence argument is
    specific to `DW = 8`.

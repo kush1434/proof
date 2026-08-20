@@ -85,6 +85,17 @@ testbench defects were cases where the environment reported a false pass.
 
 | TB-5 | 2026-08-14 | Mutant **M12** (`busy` no longer covers the retire cycle) escaped the whole 31-test suite | `./mutate.sh` M12 | The contract is “do not present a byte while `busy`”, so its converse must hold: any cycle `busy` is low, a byte is accepted. Dropping `busy` one cycle early opens a window where the host may legally send and the byte is silently ignored, desynchronising the rest of the stream. **Every test waited on `done`, never on `busy`**, so nothing ever observed the handoff between them | Added `test_busy_covers_the_whole_retire`: after the final term, poll every cycle and assert that on the first cycle `busy` is low, `done` is already high. M12 is now caught — by exactly that one test |
 
+| TB-6 | 2026-08-19 | With post-route SDF back-annotated, 42 of 43 tests failed with `done never asserted`. The datapath result was correct and bit-exact; only the FSM's final transition was wrong | first SDF back-annotated gate-level run (`test/run.py --gates --sdf`) | `send()` deasserts `uio_in` on the line *after* `await ClockCycles(...)`, so the write lands in the same time step as the clock edge. With no delays that is harmless — the flops sample the old value and the write is seen afterwards. With delays it is not: the clock takes ~0.9 ns to reach the flops through the clock tree while an input change reaches them in ~0.1 ns, so a pin driven *at* the edge arrives first and the flop captures the new value. `last_r` therefore latched 0 instead of 1, and `S_ACC` branched to `S_RUN` instead of `S_FIN`. **A stimulus idealisation, not a chip defect** — a real host is clocked by the same clock and its outputs change a clock-to-output time after the edge, never on it. Note it is period-independent, which is what distinguished it from a setup failure: it reproduced identically at 10, 20, 30, 100 and 200 ns | `tb.v` models the host's clock-to-output delay (`GL_IN_DELAY_NS`, default 1.0 ns) on `ui_in`, `uio_in`, `rst_n` and `ena`, under `` `ifdef USE_SDF `` so the RTL and functional gate-level builds are textually unchanged. Measured threshold at the slow corner: 0.20 ns still fails (22 of 43), 0.25 ns passes |
+| TB-7 | 2026-08-19 | With TB-6 fixed, 29 of 43 still failed, on a hard plateau no input delay could move | same run, after TB-6 | `settle()` was a fixed 1 ns, chosen in TB-2 to step past the NBA region. That is a *delta-cycle* concern, and 1 ns answered it. It is not a *timing* concern: the annotated netlist takes **1975 ps** to drive its pins at the slow corner, so every read at 1 ns returned the previous cycle's value. The failures read as logic bugs — `busy` low when it should be high — rather than as a sampling mistake | `SETTLE_NS`, overridable by `PROOF_SETTLE_NS`, default still 1 so every existing run is unchanged; the SDF job sets 3. `test_sdf.py` measures the real clock-to-output time and asserts the settle window covers it, so the number cannot go stale silently. Measured threshold: 1.5 ns fails, 1.8 ns passes |
+
+TB-6 and TB-7 are a different family from the ones above: not checks that could
+not fire, but **assumptions that were true only because nothing took time**.
+Both had been in the suite since bring-up, both were invisible to every RTL and
+functional gate-level run, and neither is a defect in the chip. They are the
+argument for back-annotating at all — a zero-delay testbench encodes a host
+with zero clock-to-output and a chip with zero clock-to-output, and it is worth
+knowing which of your passes depend on that.
+
 TB-3, TB-4 and TB-5 are all the same family as TB-4 on the CNN accelerator — a check
 that could not fire — and TB-4 here is structurally identical to that project's
 M7, where a scoreboard comparing only final memory contents could not see a
@@ -213,11 +224,17 @@ misleading as one that omits uncovered things.
   *(Said −0.048 [−0.098, +0.003] until 2026-08-18 — a third value for the
   same quantity, RESULTS.md and VERIFICATION.md each having carried a
   different one. All three are now the measured −0.059.)*
-- **Timing / setup / hold.** STA reports +9.89 ns setup and +0.121 ns hold
-  worst slack at a 20 ns period. Gate-level simulation passes but compiles with
-  `-DFUNCTIONAL -DSIM` and **no SDF back-annotation**, so it catches synthesis
-  differences, X-propagation and missing resets while saying nothing about
-  setup or hold. Timing is claimed on STA alone.
+- **Setup and hold are still checked by STA alone.** *(Narrowed 2026-08-19,
+  not closed.)* Gate-level simulation now also runs with the post-route SDF
+  back-annotated, and the 43 tests pass at all three corners with real cell and
+  interconnect delays — see RESULTS.md §6.1. That closes the "no timing at all"
+  gap, and it is **not** a setup/hold check: Icarus implements no timing checks
+  in any version, so the SDF's 168 TIMINGCHECK blocks and the cell models'
+  `$setuphold`/`$recrem`/`$width` are inert. The simulator says so itself, both
+  at compile time and during annotation. STA remains the only thing that has
+  checked setup and hold: +10.08 ns and +0.120 ns worst slack at 20 ns.
+  Closing this properly needs a simulator that implements timing checks, which
+  is a tool change, not a repository change.
 - **Only `DW = 8` and `N_HIDDEN = 8` are verified.** Both are parameters; no
   other value has been simulated, and the M2 equivalence argument is specific
   to `DW = 8`.

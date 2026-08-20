@@ -67,6 +67,8 @@ CANONICAL = [
     ("flip-flops",             "168",     "lint.sh / gds metrics"),
     ("utilisation",            "83.53",   "gds metrics.csv"),
     ("standard cells",         "1443",    "gds metrics.csv"),
+    ("top-level tests",        "43",      "test/run.py"),
+    ("clock-to-output",        "1975",    "test/run.py --gates --sdf ... --module test_sdf"),
 ]
 
 # (retired value, its replacement, why). The replacement matters: a line
@@ -91,6 +93,17 @@ RETIRED = [
     # alone is 2.0x on the mean and 6.5x on the tail.
     ("4.9", "2.0", "quantisation mean gain, bundled with data cleaning"),
     ("8.6", "6.5", "quantisation tail gain, bundled with data cleaning"),
+    # Both found 2026-08-19, both had survived in exactly one document while
+    # every other one had moved on. Phrased tightly rather than as bare
+    # numbers: "41" collides with "41 of 44 participants", and "four" appears
+    # legitimately in "four independent angles, and a fifth on 2026-08-18".
+    ("41, all bit-exact", "43, bit-exact", "top-level test count"),
+    ("four literature searches", "five literature searches",
+     "search count, before the 2026-08-18 SoftSNN pass"),
+    # The gate-level run is no longer timing-free. Any document still saying so
+    # is behind RESULTS.md 6.1.
+    ("no SDF back-annotation", "post-route SDF",
+     "gate-level sim was functional-only until 2026-08-19"),
 ]
 
 CORRECTION_MARKERS = (

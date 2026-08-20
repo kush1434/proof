@@ -16,7 +16,15 @@ PROJECT_SOURCES in the Makefile, change it here too. Both must also match
 
     python run.py                    # RTL simulation of the whole design
     python run.py --gates            # gate-level (needs gate_level_netlist.v + PDK_ROOT)
+    python run.py --gates --sdf F    # ...with delays back-annotated from F
     python run.py --unit mac_serial  # submodule unit test
+
+--sdf takes an SDF already put through sdf_prep.py -- the raw OpenSTA file
+aborts Icarus's reader part-way and leaves most of the netlist at zero delay.
+It adds -gspecify (without which Icarus omits $sdf_annotate and says so once,
+at compile time) and -ginterconnect (without which every net delay is
+rejected). Delays only: Icarus implements no timing checks, so setup and hold
+are still STA's word alone.
 
 --unit has no Makefile equivalent: the template only knows how to build the
 top level. It expects src/NAME.v, test/tb_NAME.v and test/test_NAME.py.
@@ -43,15 +51,17 @@ PROJECT_SOURCES = [
 
 
 def plan(args):
-    """Return (sources, defines, build_dir, toplevel, test_module)."""
+    """Return a dict describing one build+run."""
     if args.unit:
         name = args.unit
-        return (
-            [SRC / f"{name}.v", HERE / f"tb_{name}.v"],
-            {},
-            HERE / "sim_build" / f"unit_{name}",
-            f"tb_{name}",
-            f"test_{name}",
+        return dict(
+            sources=[SRC / f"{name}.v", HERE / f"tb_{name}.v"],
+            defines={},
+            build_dir=HERE / "sim_build" / f"unit_{name}",
+            toplevel=f"tb_{name}",
+            test_module=f"test_{name}",
+            build_args=[],
+            plusargs=[],
         )
 
     if args.gates:
@@ -65,29 +75,58 @@ def plan(args):
                 "  runs/wokwi/results/final/verilog/gl/<top>.v"
             )
         pdk = Path(pdk_root) / "ihp-sg13g2" / "libs.ref"
-        return (
-            [
+        # Matches the Makefile. Note -DFUNCTIONAL is inherited from the sky130
+        # template and is dead weight here: sg13g2_stdcell.v contains no
+        # `ifdef FUNCTIONAL` at all. It is kept only so the two paths stay
+        # identical.
+        defines = {"GL_TEST": 1, "FUNCTIONAL": 1, "SIM": 1}
+        build_args = []
+        plusargs = []
+        build_dir = HERE / "sim_build" / "gl"
+
+        if args.sdf:
+            sdf = Path(args.sdf).resolve()
+            if not sdf.exists():
+                sys.exit(f"SDF file not found: {sdf}")
+            defines["USE_SDF"] = 1
+            # float, not str. cocotb renders a string define as
+            # -DGL_IN_DELAY_NS="1.0" -- quoted -- and `assign #("1.0")` is a
+            # string literal used as a delay, which compiles, runs, and puts
+            # the whole design in X. Nothing reports it.
+            defines["GL_IN_DELAY_NS"] = float(args.in_delay)
+            # -gspecify: Icarus omits specify blocks by default, and with them
+            # $sdf_annotate. -ginterconnect: without it every INTERCONNECT in
+            # the file is a hard error, and the errors abort the rest of it.
+            build_args = ["-gspecify", "-ginterconnect"]
+            # The path goes in as a plusarg, not a define: a quoted path in a
+            # define picks up a second layer of quotes through the runner and
+            # annotates nothing at all.
+            plusargs = ["+sdf=" + str(sdf).replace("\\", "/")]
+            build_dir = HERE / "sim_build" / "gl_sdf"
+
+        return dict(
+            sources=[
                 pdk / "sg13g2_io" / "verilog" / "sg13g2_io.v",
                 pdk / "sg13g2_stdcell" / "verilog" / "sg13g2_stdcell.v",
                 netlist,
                 HERE / "tb.v",
             ],
-            # Matches the Makefile. There is no SDF back-annotation, so this is
-            # a *functional* gate-level sim: it catches synthesis differences,
-            # X-propagation and missing resets, but says nothing about
-            # setup/hold.
-            {"GL_TEST": 1, "FUNCTIONAL": 1, "SIM": 1},
-            HERE / "sim_build" / "gl",
-            "tb",
-            "test",
+            defines=defines,
+            build_dir=build_dir,
+            toplevel="tb",
+            test_module=args.module,
+            build_args=build_args,
+            plusargs=plusargs,
         )
 
-    return (
-        [SRC / s for s in PROJECT_SOURCES] + [HERE / "tb.v"],
-        {},
-        HERE / "sim_build" / "rtl",
-        "tb",
-        args.module,
+    return dict(
+        sources=[SRC / s for s in PROJECT_SOURCES] + [HERE / "tb.v"],
+        defines={},
+        build_dir=HERE / "sim_build" / "rtl",
+        toplevel="tb",
+        test_module=args.module,
+        build_args=[],
+        plusargs=[],
     )
 
 
@@ -123,6 +162,17 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--gates", action="store_true", help="gate-level simulation")
     ap.add_argument(
+        "--sdf",
+        metavar="FILE",
+        help="back-annotate delays from FILE (run it through sdf_prep.py first)",
+    )
+    ap.add_argument(
+        "--in-delay",
+        default=os.environ.get("PROOF_IN_DELAY", "1.0"),
+        metavar="NS",
+        help="modelled host clock-to-output, ns (default 1.0); see tb.v",
+    )
+    ap.add_argument(
         "--unit",
         metavar="NAME",
         help="unit-test a submodule: src/NAME.v + test/tb_NAME.v + test/test_NAME.py",
@@ -141,29 +191,33 @@ def main():
 
     if args.unit and args.gates:
         sys.exit("--unit and --gates are mutually exclusive")
+    if args.sdf and not args.gates:
+        sys.exit("--sdf only means anything with --gates")
 
-    sources, defines, build_dir, toplevel, test_module = plan(args)
+    p = plan(args)
 
-    missing = [str(s) for s in sources if not Path(s).exists()]
+    missing = [str(s) for s in p["sources"] if not Path(s).exists()]
     if missing:
         sys.exit("missing source file(s):\n  " + "\n  ".join(missing))
 
     runner = get_runner("icarus")
     runner.build(
-        sources=sources,
-        hdl_toplevel=toplevel,
+        sources=p["sources"],
+        hdl_toplevel=p["toplevel"],
         includes=[SRC],
-        defines=defines,
-        build_dir=build_dir,
+        defines=p["defines"],
+        build_dir=p["build_dir"],
         always=True,  # equivalent to `make -B`; a stale sim_build is a real trap
         timescale=("1ns", "1ps"),
+        build_args=p["build_args"],
     )
     results = runner.test(
-        hdl_toplevel=toplevel,
-        test_module=test_module,
-        build_dir=build_dir,
+        hdl_toplevel=p["toplevel"],
+        test_module=p["test_module"],
+        build_dir=p["build_dir"],
         test_dir=HERE,
-        results_xml=f"results_{test_module}.xml",
+        plusargs=p["plusargs"],
+        results_xml=f"results_{p['test_module']}.xml",
     )
     check_results(results)
 

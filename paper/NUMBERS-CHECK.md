@@ -298,6 +298,44 @@ paper, so pick whatever form the maintainers ask for.
 bullet says **two**. The paper says four, per §9's dated table. Worth
 reconciling in RESULTS.md.
 
+*(Resolved 2026-08-19, and it had drifted again in the meantime: the fifth
+search on 2026-08-18 made RESULTS.md §9, §10 and HANDOFF all say five, while
+the paper still said "four literature searches". The paper now says five, and
+`check_numbers.py` holds the retired phrasing so it cannot come back. The
+lesson is the ordinary one — a count is a number, and a number that lives in
+five documents needs the same mechanical guard as any other.)*
+
+---
+
+## 9. Second pass, 2026-08-19 — the SDF work
+
+Adding back-annotated gate-level simulation (RESULTS.md §6.1) turned up two
+more stale figures, both of the same shape as everything above: correct once,
+superseded, and left behind in exactly one document while every other one moved
+on.
+
+| where | said | actual | how it was caught |
+|---|---|---|---|
+| RESULTS.md §7 | **41** top-level tests | **43** | `test/test.py` has 43 `@cocotb.test` decorators and the suite prints `TESTS=43`. HANDOFF, `test.yaml` and the paper all already said 43 |
+| paper, Limitations | novelty from **four** literature searches | **five** | §9's own table and HANDOFF have said five since the SoftSNN pass on 2026-08-18 |
+
+Both are now in `check_numbers.py`'s retired list, and both were verified to
+fail the gate when reintroduced. Phrasing matters for these two: a bare `41`
+collides with "41 of 44 participants" and a bare `four` collides with "four
+independent angles, and a fifth on 2026-08-18", so the retired entries are the
+longer strings `41, all bit-exact` and `four literature searches`.
+
+A third entry was added pre-emptively rather than in response to a mistake:
+`no SDF back-annotation`, which was true of the gate-level run until this pass
+and is now false in four documents at once.
+
+**Nothing was found wrong in the §6.1 numbers themselves**, because they are
+new. They are, however, exactly the kind that goes stale: every one of them
+depends on the netlist and SDF of a particular GDS run. `test/test_sdf.py`
+asserts the load-bearing one (clock-to-output, 1975 ps) on every CI run rather
+than leaving it in prose, which is the same fix `test_cycles.py` was for the
+latency figure.
+
 ---
 
 ## 8. Changes made to the repo

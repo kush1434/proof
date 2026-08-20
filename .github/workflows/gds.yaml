@@ -37,6 +37,155 @@ jobs:
       - name: GL test
         uses: TinyTapeout/tt-gds-action/gl_test@ttihp26b
 
+  # The gl_test job above runs the netlist with no timing at all. This one runs
+  # the same netlist with the post-route SDF the flow already writes, so the
+  # 43 tests execute against real cell and interconnect delays instead of
+  # against zero. It is a separate job because the tt-gds-action gl_test only
+  # downloads `tt_submission`, which has no SDF in it -- the SDF lives in
+  # `GDS_logs`, under runs/wokwi/final/sdf/<corner>/.
+  #
+  # It does NOT check setup or hold. Icarus implements no timing checks in any
+  # version; it says so itself at compile time and again during annotation.
+  # See test/sdf_prep.py. Timing signoff is still STA's.
+  gl_test_sdf:
+    needs: gds
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        corner:
+          - nom_slow_1p08V_125C
+          - nom_typ_1p20V_25C
+          - nom_fast_1p32V_m40C
+    env:
+      # The chip is constrained at 20 ns. The functional suites run at 10 ns
+      # because with no delays the period cannot matter; here it can, so this
+      # runs at the period the design was actually signed off for.
+      PROOF_CLK_NS: 20
+      # Outputs take ~2.0 ns to reach the pins at the slow corner, so a read
+      # 1 ns after the edge returns the previous cycle's value. test_sdf.py
+      # measures the real figure and asserts this covers it.
+      PROOF_SETTLE_NS: 3
+      PROOF_IN_DELAY: 1.0
+      PROOF_EXPECT_SDF: 1
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Download the submission (netlist + pdk.json)
+        uses: actions/download-artifact@v7
+        with:
+          name: tt_submission
+          path: tt_submission
+
+      - name: Download the run logs (they carry the SDF)
+        uses: actions/download-artifact@v7
+        with:
+          name: GDS_logs
+          path: gds_logs
+
+      - name: Set up environment variables
+        working-directory: tt_submission/tt_submission
+        shell: bash
+        run: |
+          cat << __EOF >> $GITHUB_ENV
+          PDK=$(jq -r '.PDK' pdk.json)
+          PDK_ROOT=/home/runner/pdk
+          PDK_VERSION=$(jq -r '.PDK_VERSION' pdk.json)
+          __EOF
+
+      - name: Install ${{ env.PDK }} PDK
+        uses: TinyTapeout/ciel-action@v1
+        with:
+          pdk_name: ${{ env.PDK }}
+          pdk_version: ${{ env.PDK_VERSION }}
+          pdk_root: ${{ env.PDK_ROOT }}
+
+      - name: Setup python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install Python packages
+        shell: bash
+        run: pip install -r test/requirements.txt
+
+      # The same build tt-gds-action installs. Icarus 12 is not usable here:
+      # it rounds every SDF value to a whole time unit, so every sub-nanosecond
+      # cell delay becomes zero, and it never drives the sg13g2 models'
+      # `delayed_*` nets, so the flops sit at X.
+      - name: Install iverilog
+        shell: bash
+        run: |
+          wget https://github.com/TinyTapeout/iverilog/releases/download/v13.0/iverilog_13.0-1_amd64.deb
+          sudo apt-get update -y
+          sudo apt-get install -y ./iverilog_13.0-1_amd64.deb
+
+      - name: Check sdf_prep against its own known answers
+        shell: bash
+        run: python test/sdf_prep.py --selftest
+
+      - name: Convert the ${{ matrix.corner }} SDF
+        shell: bash
+        run: |
+          SRC=$(ls gds_logs/runs/wokwi/final/sdf/${{ matrix.corner }}/*.sdf)
+          echo "source: $SRC"
+          python test/sdf_prep.py "$SRC" test/annotate.sdf --json test/sdf_prep.json
+
+      - name: Run the suite with delays back-annotated
+        shell: bash
+        run: |
+          cp tt_submission/tt_submission/*.v test/gate_level_netlist.v
+          cd test
+          make clean
+          GATES=yes SDF_FILE=$PWD/annotate.sdf make 2>&1 | tee sdf_run.log
+
+          # `make` returns success even when tests fail.
+          test -f results.xml
+          ! grep failure results.xml
+
+          # A partially-applied SDF still simulates, and still passes, at zero
+          # delay for every cell the reader gave up on. Any diagnostic at all
+          # means the annotation is not what it claims to be.
+          if grep -E "SDF (WARNING|ERROR)" sdf_run.log; then
+            echo "::error::the SDF did not annotate cleanly"
+            exit 1
+          fi
+
+          # cocotb clears results.xml at the start of every run, and the next
+          # step is another run, so keep this one.
+          cp results.xml results_sdf_suite.xml
+
+      # Everything above still passes if nothing was annotated at all. This
+      # measures the clock-to-output delay at the pins and fails if it is zero.
+      - name: Prove the delays actually landed
+        shell: bash
+        run: |
+          cd test
+          COCOTB_TEST_MODULES=test_sdf GATES=yes SDF_FILE=$PWD/annotate.sdf \
+            make 2>&1 | tee sdf_timing.log
+          test -f results.xml
+          ! grep failure results.xml
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gatelevel_sdf_${{ matrix.corner }}
+          path: |
+            test/results*.xml
+            test/sdf_run.log
+            test/sdf_timing.log
+            test/sdf_prep.json
+
+      - name: Test Summary
+        if: always()
+        uses: test-summary/action@v2.6
+        with:
+          paths: test/results*.xml
+
   viewer:
     needs: gds
     runs-on: ubuntu-24.04

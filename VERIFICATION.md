@@ -349,14 +349,29 @@ From the LibreLane run, both modes:
 | Flip-flops / stdcells | 168 / 1,443 |
 | Utilisation | 83.53 % of a 1×1 tile |
 
-Gate-level simulation passes.
+Gate-level simulation passes, twice: once functionally, and once with the
+post-route SDF back-annotated.
 
-**What gate-level sim does not prove.** The template compiles with
-`-DFUNCTIONAL -DSIM` and **no SDF back-annotation**. It is a *functional*
-gate-level simulation: it catches synthesis optimisation differences,
-X-propagation and missing resets. It says **nothing about setup or hold**.
-Timing closure is claimed only on the strength of the static timing analysis
-figures above, not on simulation.
+**The functional run** is the template's, compiling `-DFUNCTIONAL -DSIM` with
+no timing at all. It catches synthesis optimisation differences, X-propagation
+and missing resets.
+
+**The back-annotated run** (`gl_test_sdf`, added 2026-08-19) puts the flow's own
+post-route SDF through `test/sdf_prep.py` and annotates it, so the same 43 tests
+execute against real cell and interconnect delays. They pass at all three
+corners, with zero SDF diagnostics. Measured clock-to-output at the pins:
+1975 ps at the slow corner. Details and the conversion report are in
+RESULTS.md §6.1.
+
+**What neither run proves: setup and hold.** Icarus implements no timing checks
+in any version — it says so at compile time ("Timing checks are not supported")
+and again during annotation ("SDF WARNING: TIMINGCHECK not supported") — so the
+SDF's 168 TIMINGCHECK blocks and the cell models' `$setuphold`, `$recrem` and
+`$width` never run. **Timing closure is still claimed only on the static timing
+analysis figures above, not on simulation.** What the annotated run adds is
+that the netlist is known to compute correctly with real delays rather than
+only with none, and it is what found TB-6 and TB-7 — two testbench assumptions
+that held only because nothing took time.
 
 ---
 

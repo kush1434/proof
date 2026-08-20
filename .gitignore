@@ -26,3 +26,9 @@ test/weights.json
 model/weights.json
 __pycache__/
 paper/figures/__pycache__/
+
+# SDF back-annotated gate-level run (test/sdf_prep.py + the gl_test_sdf job)
+test/annotate.sdf
+test/sdf_prep.json
+test/sdf_run.log
+test/sdf_timing.log

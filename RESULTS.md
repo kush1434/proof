@@ -6,6 +6,9 @@ nothing here has to be taken on trust or re-derived from memory.
 Reproduce: `model/train.py --cv 5`, `model/clinical.py`,
 `model/personalise.py`, `model/sign_condition.py`, `model/width_sweep.py`,
 `model/ablation.py`, `test/monotonicity.py`, `./mutate.sh`, `./lint.sh`.
+The gate-level timing figures in §6.1 need the GDS artifacts:
+`test/sdf_prep.py <corner>.sdf annotate.sdf` then
+`python test/run.py --gates --sdf annotate.sdf`.
 
 Every table below now names a script that produces it. That was not true before
 2026-08-15 — §1.2, §1.3 and §5 had none — and writing the three missing ones
@@ -372,9 +375,100 @@ and nine neurons is exactly the 18-cycle difference. A deployed host reads only
 the final `y`. `test/test_cycles.py` asserts both numbers and the `test` workflow runs it
 on every push, so neither can drift again.
 
-`gds`, `precheck` and `gl_test` all pass. Gate-level simulation is
-**functional only** — `-DFUNCTIONAL -DSIM`, no SDF back-annotation — so timing
-is claimed on STA alone.
+`gds`, `precheck` and `gl_test` all pass.
+
+### 6.1 Gate-level simulation with back-annotated delays
+
+`test/sdf_prep.py`, `test/test_sdf.py`, and the `gl_test_sdf` job in
+`.github/workflows/gds.yaml`. Added 2026-08-19; before that the gate-level run
+compiled `-DFUNCTIONAL -DSIM` with no timing at all.
+
+The flow already writes a post-route SDF per corner — it is in the `GDS_logs`
+artifact under `runs/wokwi/final/sdf/`, not in `tt_submission`, which is why
+the stock `gl_test` job cannot see it. Annotated, **all 43 top-level tests pass
+bit-exactly at all three corners** at the signed-off 20 ns period:
+
+| corner | SDF | result | SDF diagnostics |
+|---|---|---|---|
+| `nom_slow_1p08V_125C` | slow, 1.08 V, 125 °C | **43/43** | 0 |
+| `nom_typ_1p20V_25C` | typical, 1.20 V, 25 °C | **43/43** | 0 |
+| `nom_fast_1p32V_m40C` | fast, 1.32 V, −40 °C | **43/43** | 0 |
+
+**Measured clock-to-output at the pins: 1975 ps** at the slow corner
+(`test_sdf.py`, worst over an inference). That is a simulated timing number,
+and it is the first one this project has had.
+
+⚠️ **This is not a setup/hold check, and must not be described as one.**
+Icarus implements no timing checks in any version — it says so itself, at
+compile time ("Timing checks are not supported. Delayed reference and data
+signals become copies of the original reference and data signals") and again
+during annotation ("SDF WARNING: TIMINGCHECK not supported"). The SDF's 168
+TIMINGCHECK blocks, carrying real setup and hold numbers, are inert; the cell
+models' `$setuphold`, `$recrem` and `$width` never run. **Setup and hold still
+rest on STA alone.** What back-annotation adds is that the netlist is now known
+to compute correctly with real cell and interconnect delays, rather than only
+with none.
+
+**The raw SDF cannot be used directly.** Icarus rejects three of the
+constructs OpenSTA emits, and each rejection abandons the rest of the file, so
+an unfiltered SDF annotates the first third of the design and leaves the rest
+at zero delay — while the simulation still passes. Measured: unfiltered, 3198
+SDF diagnostics and 42 of 43 tests failing. `sdf_prep.py` converts it, and its
+report is the size of the approximation:
+
+| | |
+|---|---|
+| IOPATH arcs in / out | 4649 / 2999 |
+| conditional (`COND`) arcs collapsed to their worst case | 1650 |
+| ...of which raised the delay above the unconditional value | 132 |
+| interconnect arcs kept | 3178 |
+| tie-cell interconnect arcs dropped (all 0.000 ns) | 13 |
+| TIMINGCHECK lines dropped (Icarus ignores them) | 1848 |
+
+Collapsing `COND` to the elementwise maximum is pessimistic by construction.
+Every conditional pin pair is also covered by an unconditional arc, but the
+unconditional value is not always the slowest, so dropping conditions outright
+would have been optimistic.
+
+**What the annotated run measures that the functional one cannot.** Sweeping
+the two stimulus parameters until the suite breaks turns them into pin timing
+requirements at the slow corner:
+
+| quantity | measured |
+|---|---|
+| clock-to-output at the pins | **1975 ps** (`test_sdf.py`) |
+| host must hold inputs past the clock edge | between **0.20 ns** (fails, 22/43) and **0.25 ns** (passes) |
+| outputs must be sampled at least | between **1.5 ns** (fails, 14/43) and **1.8 ns** (passes) after the edge |
+
+The last two are the thresholds behind `GL_IN_DELAY_NS` and `PROOF_SETTLE_NS`;
+they are properties of the stimulus meeting the chip, not of the chip alone.
+See `BUGS.md` TB-6 and TB-7.
+
+⚠️ **This setup cannot measure a maximum frequency, and the obvious attempt is
+misleading.** Sweeping the clock period looks like it works — 43/43 at 20, 12
+and 10 ns, 13/43 at 8 ns — but shrinking the stimulus schedule at 8 ns
+(`settle` 3 → 2.0 ns, host delay 1.0 → 0.3 ns) takes it straight back to
+43/43. The testbench spends a fixed ~2.3 ns of every period waiting to read and
+waiting to drive, so at short periods **the stimulus binds before the design
+does** and the number measured is the testbench's. Two reasons not to quote a
+simulated F\_max even with that fixed: without timing checks a simulation only
+fails when data misses the capture edge on a path the stimulus actually
+sensitises, which is optimistic against STA's topological worst case; and it
+passes at 10 ns against an STA critical path of about 9.9 ns, which is the same
+point showing through. **STA remains the only source for a frequency claim.**
+
+**Two flags are load-bearing.** Without `-gspecify` Icarus omits specify
+blocks and with them `$sdf_annotate` entirely; without `-ginterconnect` every
+one of the 3191 net delays is an error. Either omission yields a green run at
+zero delay. `test_sdf.py` exists to catch exactly that: it measures the
+clock-to-output delay and fails if it is at the measurement floor. Run without
+an SDF, it fails — verified, not assumed.
+
+⚠️ **Only Icarus 13 or newer works.** Icarus 12 rounds every SDF value to a
+whole time unit, so all 4649 sub-nanosecond cell delays become zero, and it
+never drives the sg13g2 models' `delayed_*` nets, so every flop sits at X.
+CI installs Tiny Tapeout's 13.0 build; oss-cad-suite is 14.0; the standalone
+`Dev Tools\iverilog` on the development machine is 12.0 and is unusable here.
 
 ---
 
@@ -382,13 +476,22 @@ is claimed on STA alone.
 
 | | |
 |---|---|
-| Top-level tests | 41, all bit-exact against the integer reference |
+| Top-level tests | 43, bit-exact against the integer reference |
 | Unit tests | 6, **exhaustive** over all 65,536 signed 8×8 multiplier inputs |
 | Mutation score | **29 mutants: 28 caught, 1 proven equivalent, 0 escaped** |
 | Functional coverage | **54/54 named bins**, asserted not merely printed |
+| Gate level | 43/43 functional, and **43/43 with post-route SDF at all three corners** (§6.1) |
 
-Four RTL defects and five testbench defects are logged in `BUGS.md`, including
-three cases where the environment reported a false pass.
+⚠️ Corrected 2026-08-19: this row read **41** top-level tests. `test/test.py`
+carries 43 `@cocotb.test` decorators and the suite reports `TESTS=43`; HANDOFF
+and `.github/workflows/test.yaml` already said 43, so this was the only place
+left behind.
+
+Four RTL defects and seven testbench defects are logged in `BUGS.md`, including
+three cases where the environment reported a false pass. Two of the seven
+(TB-6, TB-7) were invisible until delays were back-annotated: the suite drove
+pins in the same time step as the clock edge, and sampled outputs 1 ns after
+it, both of which only matter once the netlist takes time to respond.
 
 ---
 
@@ -508,4 +611,9 @@ neighbours a reviewer will reach for.
   searches (§9, the fifth on 2026-08-18) found no prior hardware that checks a
   monotonicity precondition at its own interface, but absence of evidence in five
   searches is still weak. Phrase it as a limitation of the search, not as established priority.
-  *(This bullet said "two"; §9 and HANDOFF both say four.)*
+  *(This bullet said "two" until 2026-08-15, when §9 and HANDOFF both said
+  four; the fifth search on 2026-08-18 moved all three to five. The paper said
+  "four literature searches" until 2026-08-19 — the same count drifting for a
+  third time, in a fourth document. `check_numbers.py` now holds the retired
+  phrasing, because a correction note is exempt from that gate and so this
+  line could never have caught itself.)*
