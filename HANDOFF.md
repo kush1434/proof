@@ -281,11 +281,27 @@ Two older lessons, still live:
 2. **Only `DW = 8` and `N_HIDDEN = 8` are verified.** Both are parameters; no
    other value has ever been simulated, and the M2 equivalence argument is
    specific to `DW = 8`.
+
+   ⚠️ The `control` task in `formal/run.py` runs the *accumulator* at 8/6 widths
+   and passes. That is **not** evidence about other parameter values of the
+   design: it exists only so the wrapping mutant's defect is reachable inside a
+   bounded run, and it is one module in a formal harness, not the chip.
 3. **The quantisation error bound is measured but not chosen** — 0.6 % median,
    2.8 % p95. Not code. `BUGS.md` is explicit that picking it is a judgement
    with a safety argument attached and belongs to the owner.
 4. **Structural coverage.** 54 functional bins, all hit, but no line, toggle or
    FSM coverage — Icarus does not emit it. Verilator could.
+5. **Formal covers Mode A, not Mode B.** `monotone_field` proves the reported
+   value monotone through the whole core for a single-term Mode A inference.
+   Mode B needs eight hidden neurons before layer 2 is reached — 896 cycles —
+   which is out of reach for bounded model checking, and the property is
+   2-safety so it would be two copies of the core over that horizon. It is a
+   **depth problem, not a modelling one**. The guard's own correctness is
+   likewise unproved formally; it rests on 5 directed tests, mutants M28/M29,
+   and 7 coverage bins. `formal/run.py`'s docstring records which stages were
+   deliberately left out and why — the multiplier, for instance, should never
+   get a proof, because its exhaustive test over all 65,536 pairs is strictly
+   stronger.
 
 `BUGS.md` "Areas deliberately not covered" is the full, honest list; the four
 above are the ones still worth acting on.
@@ -297,7 +313,6 @@ above are the ones still worth acting on.
   names a *student* author.
 - Confirm the `\bibitem{tinytapeout}` citation form — the only unverified
   reference.
-- Enable GitHub Pages (Source → "GitHub Actions") if he wants the viewer.
 - **Submit to Tiny Tapeout.** RTL freezes there.
 - Decide on Dallas, 1–4 December. In-person only, no virtual option, and a
   parent must accompany him. **Conflicts with ASGSR, 2–5 December, Virginia.**

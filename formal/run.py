@@ -60,6 +60,32 @@ across a whole network is still the hand argument in RESULTS.md 3.
 **Do not describe the guarantee as formally verified.** Two lemmas are; the
 composition is not.
 
+WHAT IS DELIBERATELY *NOT* HERE, AND WHY
+----------------------------------------
+Recorded so nobody spends a night re-deriving it. The hand argument in
+RESULTS.md 3 has four bullets, and formal is the right tool for only some.
+
+  "multiplying by a constant is monotone"  -- NOT here, and should not be.
+      test/test_mac_serial.py is EXHAUSTIVE over all 65,536 signed 8x8 pairs,
+      so `product == a*b` is established for every input that exists.
+      Monotonicity then follows by integer arithmetic. Exhaustion is strictly
+      stronger than a proof; adding one would be motion, not evidence.
+
+  "a saturating sum is monotone"           -- monotone_acc, unbounded. Here.
+
+  "arithmetic right shift is monotone"     -- NOT here. Covered inside
+      monotone_field (the shift is in the path, over all 32 shift values via
+      anyconst), and test_shift_sweep_full_range already sweeps all 32 against
+      the reference, including the sign-replication region above 23 that the
+      project previously flagged as assumed rather than checked.
+
+  "ReLU and clamp are monotone"            -- NOT here. h_new is on the Mode B
+      path, which needs eight hidden neurons before layer 2 is reached. That
+      is the 896-cycle horizon below.
+
+So the remaining genuine gap is Mode B end to end, not the individual stages.
+It is a depth problem, not a modelling one.
+
 Engine note: yices does not close `monotone_field` in ten minutes, boolector
 does in about twenty seconds. If a proof appears intractable, try the other
 engine before concluding anything about the design.
