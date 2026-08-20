@@ -31,6 +31,7 @@ seniors).
 | Tests | 43 top-level + 6 unit (exhaustive over all 65,536 multiplier inputs) + 3 latency |
 | Mutation | 29 mutants — 28 caught, 1 proven equivalent, **0 escaped** |
 | Coverage | **54/54** named bins, asserted not printed |
+| Formal | accumulator monotonicity **proved unbounded** (k-induction, `formal/run.py`); wrapping mutant must fail, and does |
 | Silicon | 168 flops, 1443 cells, **83.53 %** utilisation |
 | Timing | setup +10.08 ns, hold +0.120 ns @ 20 ns (STA — still the only thing that checks these) |
 | Gate level | functional pass (CI). SDF back-annotated: pass at all three corners, 0 failures, 0 SDF diagnostics. CI skips 1 of 43 (trained weights are gitignored); 43/43 locally |

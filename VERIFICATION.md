@@ -70,6 +70,19 @@ where `want[i]` is +1 for an input that must raise the response and −1 for one
 that must lower it. Each hidden unit either pushes the input's effect the
 required way, or opposes it twice and so still does.
 
+**The saturating-sum bullet is machine-checked, and unbounded.**
+`formal/run.py` (SymbiYosys) proves that `src/accumulator.v` is monotone in its
+terms by k-induction -- for all inputs and all time, not to a bounded depth.
+Monotonicity relates two executions, so it is a 2-safety property: the proof is
+a miter of two instances under identical control whose only asymmetry is that
+one's term always dominates the other's. A wrapping mutant is required to fail,
+and the real design at the mutant's widths is required to pass, so the proof is
+not vacuous. RESULTS.md 3 has the table and the counterexample.
+
+The other three bullets are still hand arguments, and composition over the whole
+896-cycle inference has not been proved. **Do not call the guarantee formally
+verified.**
+
 ### 1.2 What the study found
 
 `test/monotonicity.py`, 400 weight sets constructed to satisfy the sign

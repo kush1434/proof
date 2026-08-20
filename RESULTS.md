@@ -203,6 +203,46 @@ monotone and a wrapping one is not** — saturation is load-bearing for the
 safety argument, not only for producing a sensible number. Rounding mode is a
 red herring; every standard mode is monotone.
 
+**That sentence is now machine-checked on the RTL, not just argued.**
+`formal/run.py` (SymbiYosys, added 2026-08-19) proves the load-bearing lemma —
+that `src/accumulator.v` is monotone in its terms — **by k-induction, so the
+result is unbounded**: for all inputs and all time, not "no counterexample in
+the first N cycles". It is a 2-safety property, so the proof is a miter of two
+instances under identical control whose only asymmetry is that one's term
+always dominates the other's.
+
+Three tasks run, because the proof closes in about a second and that is also
+what a vacuous proof looks like:
+
+| task | design | widths | mode | expected |
+|---|---|---|---|---|
+| `monotone_acc` | real | 24/16 (shipping) | k-induction | **PASS**, unbounded |
+| `control` | real | 8/6 (toy) | bounded | **PASS** |
+| `mutate` | **wrapping** | 8/6 (toy) | bounded | **FAIL** |
+
+`mutate` replaces saturation with wrapping — the R-4 defect class — and must
+produce a counterexample; `control` runs the real design at the same narrow
+widths so that failure is attributable to the wrapping and not to the field.
+`run.py` exits non-zero if any task misses its expectation, and that was
+verified in both directions by restoring saturation in the mutant and watching
+it go red.
+
+⚠️ **Worth knowing before trusting any bounded timing or datapath check:** the
+wrapping mutant *passes* a bounded run at the shipping widths. The rail is
+roughly 256 maximum-magnitude terms away, so no reasonable BMC depth reaches
+it — a bounded check reports a clean pass on a design carrying the R-4 defect.
+Only the unbounded proof catches it. The toy widths exist to make the defect
+reachable, not to weaken the claim.
+
+The counterexample is R-4 in miniature: the accumulator handed the larger term
+every cycle wraps past the negative rail and lands far *below* the one handed
+the smaller term, inverting the ordering the guarantee rests on.
+
+⚠️ **This is the accumulator stage, not the inference.** Composition over the
+remaining stages — arithmetic shift, ReLU, clamp, the output field — is still
+the hand argument above. A proof over the full 896-cycle streaming datapath has
+not been attempted. Do not describe the guarantee as formally verified.
+
 **An unconstrained fit does not satisfy it** — 4 of 8 hidden units disagree on
 carbohydrate, 3 on fibre. Monotonicity must be trained for.
 

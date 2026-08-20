@@ -1,0 +1,29 @@
+# Fault injection for monotone_acc.sby. This must FAIL.
+#
+# The mutant is src/accumulator.v with saturation replaced by wrapping -- the
+# R-4 defect class, and exactly what RESULTS.md 3 says destroys the property
+# ("a saturating sum is monotone and a wrapping one is not").
+#
+# Run at TOY WIDTHS, deliberately. At the shipping ACC_W=24 the rail is ~256
+# maximum-magnitude terms away, so no bounded run reaches a wrap and BMC
+# reports a clean pass on a broken design. At ACC_W=8 the same defect is
+# reachable in a few cycles and the solver produces a concrete counterexample
+# trace. control.sby runs the REAL accumulator at these same widths, so a
+# failure here is attributable to the wrapping and not to the narrow field.
+[options]
+mode bmc
+depth 24
+expect fail
+
+[engines]
+smtbmc yices
+
+[script]
+read -formal -sv wrapping_accumulator.v
+read -formal -sv monotone_acc.v
+chparam -set ACC_W 8 -set TERM_W 6 monotone_acc
+prep -top monotone_acc
+
+[files]
+wrapping_accumulator.v
+monotone_acc.v

@@ -1,0 +1,20 @@
+# Control for mutate.sby: the REAL accumulator at the mutant's toy widths.
+# It must PASS. If this failed too, the counterexample mutate.sby finds would
+# be an artefact of the narrow field rather than evidence about wrapping.
+[options]
+mode bmc
+depth 24
+expect pass
+
+[engines]
+smtbmc yices
+
+[script]
+read -formal -sv accumulator.v
+read -formal -sv monotone_acc.v
+chparam -set ACC_W 8 -set TERM_W 6 monotone_acc
+prep -top monotone_acc
+
+[files]
+../src/accumulator.v
+monotone_acc.v

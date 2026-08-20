@@ -1,0 +1,20 @@
+[options]
+# prove = k-induction: a PASS here is unbounded, for all inputs and all time,
+# not "no counterexample in the first N cycles". The property is inductive
+# (see monotone_acc.v), so this should close at a shallow depth. If it ever
+# stops closing, fall back to `mode bmc` and report the depth honestly rather
+# than quoting an unbounded result.
+mode prove
+depth 12
+
+[engines]
+smtbmc yices
+
+[script]
+read -formal -sv accumulator.v
+read -formal -sv monotone_acc.v
+prep -top monotone_acc
+
+[files]
+../src/accumulator.v
+monotone_acc.v

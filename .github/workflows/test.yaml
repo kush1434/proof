@@ -74,3 +74,44 @@ jobs:
             test/tb.fst
             test/results*.xml
             test/output/*
+
+  # The monotonicity argument in RESULTS.md 3 is a hand proof about an
+  # idealised pipeline. R-4 is this project's own evidence that such an
+  # argument can be right about the datapath and still miss what the hardware
+  # does at its edges. This machine-checks its load-bearing lemma -- that the
+  # saturating accumulator is monotone -- against src/accumulator.v itself,
+  # by k-induction, so the result is unbounded rather than "no counterexample
+  # in the first N cycles".
+  #
+  # Three tasks, not one: the proof closes in about a second, which is also
+  # what a vacuous proof looks like. A wrapping mutant must FAIL and the real
+  # design at the same widths must PASS, or the proof is proving nothing.
+  # formal/run.py exits non-zero if any task misses its expectation.
+  formal:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install oss-cad-suite (yosys, sby, yices)
+        uses: YosysHQ/setup-oss-cad-suite@v3
+
+      - name: Setup python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Prove the accumulator monotone, and check the proof can fail
+        run: |
+          cd formal
+          python run.py
+
+      - name: Upload counterexample traces
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: formal-traces
+          path: formal/*/engine_0/*.vcd
+
