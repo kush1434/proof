@@ -118,6 +118,18 @@ streaming. Only the hidden-layer width is structural, being the depth of the
 There is no host MCU. The protocol is exercised by the cocotb testbench in
 `test/`, against both the RTL and the post-layout gate-level netlist, and every
 functional test is compared bit-exactly against an integer reference model.
+The gate-level run is done twice: once with no timing, and once with the
+post-route SDF back-annotated at all three corners, so the netlist is exercised
+with real cell and interconnect delays. Setup and hold are still checked by
+static timing analysis alone — the simulator implements no timing checks.
+
+The monotonicity argument above is partly machine-checked rather than only
+reasoned: `formal/` proves the saturating accumulator monotone by k-induction
+(unbounded), and proves the value the host reads monotone through the whole
+core for a single-term Mode A inference. Reverting the fix for the truncation
+defect makes that second proof fail, so the historical bug is reproduced by a
+solver. Composition across a whole Mode B network is still the hand argument.
+
 `VERIFICATION.md` records what is verified and what is not; `BUGS.md` records
 every defect found, including the ones found in the testbench itself.
 
