@@ -1,0 +1,24 @@
+# Bounded, deliberately: this is a 2-safety property over two copies of the
+# whole core, so k-induction is out of reach. The claim is exactly "no
+# counterexample within this control sequence", and the sequence is fixed and
+# short. Depth covers the capture cycles with room to spare.
+[options]
+mode bmc
+depth 26
+expect pass
+
+[engines]
+smtbmc boolector
+
+[script]
+read -formal -sv accumulator.v
+read -formal -sv mac_serial.v
+read -formal -sv proof_core.v
+read -formal -sv monotone_field.v
+prep -top monotone_field
+
+[files]
+../src/accumulator.v
+../src/mac_serial.v
+../src/proof_core.v
+monotone_field.v

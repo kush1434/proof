@@ -17,36 +17,56 @@ check at the shipping widths, because the rail is roughly 256 maximum-magnitude
 terms away and no reasonable BMC depth reaches it. A bounded run would have
 reported a clean pass on a design with the R-4 defect in it.
 
-WHY THERE ARE THREE
--------------------
-The proof closes in about a second, which is also what a vacuous proof looks
-like. So the suite is a controlled experiment, not a single check:
+`monotone_field.sby` goes further and checks the value the HOST READS, end to
+end through `src/proof_core.v`, for a single-term Mode A inference. That is the
+place R-4 actually broke: the datapath was provably monotone while the reported
+field truncated, and truncation wraps.
 
-  monotone_acc  real accumulator, shipping widths (24/16), k-induction  -> PASS
-  control       real accumulator, toy widths (8/6), bounded             -> PASS
-  mutate        WRAPPING accumulator, toy widths, bounded               -> FAIL
+WHY THERE ARE FIVE
+------------------
+Both proofs close quickly, which is also what a vacuous proof looks like. So
+the suite is a controlled experiment, not a pair of checks:
 
-The toy widths exist so the defect is reachable inside a bounded run and the
-solver emits a concrete counterexample. `control` runs the real design at those
-same widths, so the failure in `mutate` is attributable to the wrapping and not
-to the narrow field. If `mutate` ever passes, the proof above is proving
-nothing and this exits non-zero saying so.
+  monotone_acc    accumulator, shipping widths (24/16), k-induction  -> PASS
+  control         accumulator, toy widths (8/6), bounded             -> PASS
+  mutate          WRAPPING accumulator, toy widths, bounded          -> FAIL
+  monotone_field  reported value, Mode A, whole core, bounded        -> PASS
+  mutate_field    R-4 FIX REVERTED, same property                    -> FAIL
 
-The counterexample is R-4 in miniature: the accumulator handed the *larger*
-term every cycle wraps past the negative rail and ends up far below the one
-handed the smaller term, inverting the ordering the guarantee depends on.
+`control` runs the real accumulator at the mutant's toy widths, so `mutate`'s
+failure is attributable to the wrapping and not to the narrow field. The toy
+widths exist so the defect is reachable inside a bounded run at all.
+
+`mutate_field` is R-4 itself rather than its class: the mutant is proof_core
+with the saturating output field reverted to the truncating original, the code
+whose reported response fell 31,293 -> -31,209 while the true value rose
+31,293 -> 34,327 as carbohydrate went up one count. **The historical bug is
+reproduced by a solver, and the shipped design rejects it.**
+
+Every mutant is generated from the real RTL on each run, never committed, and
+the generator exits non-zero if its pattern no longer matches -- a mutation
+that silently fails to apply produces a mutant identical to the original,
+which then passes, which reads as a healthy fault injection.
 
 WHAT IS NOT PROVED
 ------------------
-This is the accumulator stage, not the whole inference. The composition
-argument over the other stages (arithmetic shift, ReLU, clamp, the output
-field) is still the hand argument in RESULTS.md 3. Proving the full streaming
-datapath monotone is a 2-safety property over a 896-cycle inference and has
-not been attempted.
+`monotone_field` covers ONE control sequence: a single-term Mode A inference at
+fixed cycles. Within it the proof is over all shift values, all non-negative
+weights and all activation pairs. It is NOT over arbitrary control, multi-term
+streams, or Mode B -- a Mode B inference is 896 cycles and this is a 2-safety
+property, so it would be two copies of the core over that horizon. Composition
+across a whole network is still the hand argument in RESULTS.md 3.
+
+**Do not describe the guarantee as formally verified.** Two lemmas are; the
+composition is not.
+
+Engine note: yices does not close `monotone_field` in ten minutes, boolector
+does in about twenty seconds. If a proof appears intractable, try the other
+engine before concluding anything about the design.
 
 Usage:
-    python run.py            # all three
-    python run.py mutate     # one by name
+    python run.py                  # all five
+    python run.py mutate_field     # one by name
 """
 
 import os
@@ -55,12 +75,76 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).parent.resolve()
+SRC = HERE.parent / "src"
+
+# The mutant is GENERATED from src/accumulator.v on every run, never committed.
+# A checked-in copy would drift the moment the RTL changed, and a mutant that
+# differs from the real design in more ways than the one intended is not a
+# controlled experiment any more -- it is two unrelated designs. `mutate.sh`
+# learned this the hard way: M16 went INVALID rather than silently scoring,
+# because the guard rewrote the line it patched.
+MUTATIONS = [
+    # (source file, output file, what it breaks, exact text, replacement)
+    (
+        "accumulator.v", "wrapping_accumulator.v",
+        "saturation -> wrapping in the accumulator",
+        """  wire signed [ACC_W-1:0] sum_sat =
+      ovf ? {sum[ACC_W], {(ACC_W - 1) {~sum[ACC_W]}}} : sum[ACC_W-1:0];""",
+        """  // MUTANT, generated by formal/run.py -- wraps instead of clamping. This is
+  // the R-4 defect class, and the monotonicity proof must reject it.
+  wire signed [ACC_W-1:0] sum_sat = sum[ACC_W-1:0];""",
+    ),
+    (
+        # This one is R-4 itself, not merely its class: the exact line whose
+        # truncation made the reported response fall 31,293 -> -31,209 while
+        # the true value rose. Reverting it must break monotone_field.
+        "proof_core.v", "truncating_core.v",
+        "the R-4 fix reverted: the reported field truncates instead of saturating",
+        """  wire [GL_W-1:0] gl = (gl_full >  8191) ? 14'h1FFF :  // +8191
+                       (gl_full < -8192) ? 14'h2000 :  // -8192
+                                           gl_full[GL_W-1:0];""",
+        """  // MUTANT, generated by formal/run.py -- the pre-R-4 code. Truncation
+  // wraps, and wrapping is not monotone.
+  wire [GL_W-1:0] gl = gl_full[GL_W-1:0];""",
+    ),
+]
+
+
+def build_mutants():
+    """Regenerate every mutant from the real RTL.
+
+    Exits non-zero if any pattern is no longer there verbatim. That is the
+    did-not-apply guard: a mutation that silently fails to apply produces a
+    mutant identical to the original, which then PASSES, which then reads as
+    "the fault injection is fine" when it has stopped testing anything.
+    `mutate.sh` learned this the hard way -- M16 went INVALID rather than
+    silently scoring, because the guard rewrote the line it patched.
+    """
+    for src_name, out_name, what, pattern, replacement in MUTATIONS:
+        src = (SRC / src_name).read_text(encoding="utf-8")
+        n = src.count(pattern)
+        if n != 1:
+            sys.exit(
+                "mutation '%s': the pattern appears %d times in src/%s, expected "
+                "exactly 1.\nIt cannot be applied, so the fault injection is no "
+                "longer a controlled experiment. Update MUTATIONS in "
+                "formal/run.py to match the current RTL." % (what, n, src_name))
+        out = HERE / out_name
+        tmp = out.with_suffix(".v.tmp")
+        tmp.write_text(
+            "// GENERATED by formal/run.py from ../src/%s -- do not edit, do not\n"
+            "// commit. %s\n" % (src_name, what)
+            + src.replace(pattern, replacement),
+            encoding="utf-8", newline="\n")
+        os.replace(str(tmp), str(out))
 
 # name -> what it demonstrates, for the summary line
 TASKS = [
-    ("monotone_acc", "real design, shipping widths, k-induction (unbounded)"),
-    ("control", "real design, toy widths, bounded -- isolates the cause"),
-    ("mutate", "WRAPPING mutant, toy widths -- must fail"),
+    ("monotone_acc", "accumulator monotone, shipping widths, UNBOUNDED"),
+    ("control", "accumulator, toy widths, bounded -- isolates the cause"),
+    ("mutate", "accumulator WRAPPING -- must fail"),
+    ("monotone_field", "reported value monotone end to end, Mode A, bounded"),
+    ("mutate_field", "R-4 fix REVERTED -- must fail"),
 ]
 
 
@@ -82,6 +166,10 @@ def main():
     bad = [w for w in wanted if w not in known]
     if bad:
         sys.exit("unknown task(s): %s -- have %s" % (bad, list(known)))
+
+    # Always regenerate, even when running a single task by name, so the
+    # mutant can never be a stale artefact of an older RTL.
+    build_mutants()
 
     failures = []
     for name in wanted:

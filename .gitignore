@@ -33,7 +33,12 @@ test/sdf_prep.json
 test/sdf_run.log
 test/sdf_timing.log
 
-# SymbiYosys work directories (formal/run.py regenerates them)
+# SymbiYosys work directories and the generated mutant
+# (formal/run.py regenerates both)
+formal/wrapping_accumulator.v
+formal/truncating_core.v
+formal/monotone_field/
+formal/mutate_field/
 formal/monotone_acc/
 formal/control/
 formal/mutate/

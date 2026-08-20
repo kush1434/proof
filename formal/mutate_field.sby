@@ -1,0 +1,28 @@
+# Fault injection for monotone_field.sby, and it is R-4 itself rather than its
+# class: the mutant is src/proof_core.v with the R-4 fix reverted, so the
+# reported field truncates instead of saturating. That is the code whose
+# reported response fell 31,293 -> -31,209 while the true value rose 31,293 ->
+# 34,327 as carbohydrate went up by one count.
+#
+# This must FAIL. If it passes, monotone_field.sby proves nothing -- and the
+# historical bug would slip past a check written specifically to catch it.
+[options]
+mode bmc
+depth 26
+expect fail
+
+[engines]
+smtbmc boolector
+
+[script]
+read -formal -sv accumulator.v
+read -formal -sv mac_serial.v
+read -formal -sv truncating_core.v
+read -formal -sv monotone_field.v
+prep -top monotone_field
+
+[files]
+../src/accumulator.v
+../src/mac_serial.v
+truncating_core.v
+monotone_field.v

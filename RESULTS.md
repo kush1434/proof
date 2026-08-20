@@ -211,21 +211,33 @@ the first N cycles". It is a 2-safety property, so the proof is a miter of two
 instances under identical control whose only asymmetry is that one's term
 always dominates the other's.
 
-Three tasks run, because the proof closes in about a second and that is also
-what a vacuous proof looks like:
+**A second proof covers the value the host actually reads.** `monotone_field`
+runs the property end to end through `src/proof_core.v` for a single-term
+Mode A inference — which is where R-4 broke, the datapath having been provably
+monotone while the reported field truncated. Five tasks run, because both
+proofs close quickly and that is also what a vacuous proof looks like:
 
-| task | design | widths | mode | expected |
+| task | design | scope | mode | expected |
 |---|---|---|---|---|
-| `monotone_acc` | real | 24/16 (shipping) | k-induction | **PASS**, unbounded |
-| `control` | real | 8/6 (toy) | bounded | **PASS** |
-| `mutate` | **wrapping** | 8/6 (toy) | bounded | **FAIL** |
+| `monotone_acc` | real accumulator | 24/16 shipping widths | k-induction | **PASS**, unbounded |
+| `control` | real accumulator | 8/6 toy widths | bounded | **PASS** |
+| `mutate` | **wrapping** accumulator | 8/6 toy widths | bounded | **FAIL** |
+| `monotone_field` | real core | reported value, Mode A | bounded | **PASS** |
+| `mutate_field` | **R-4 fix reverted** | reported value, Mode A | bounded | **FAIL** |
 
-`mutate` replaces saturation with wrapping — the R-4 defect class — and must
-produce a counterexample; `control` runs the real design at the same narrow
-widths so that failure is attributable to the wrapping and not to the field.
-`run.py` exits non-zero if any task misses its expectation, and that was
-verified in both directions by restoring saturation in the mutant and watching
-it go red.
+`control` runs the real accumulator at the mutant's toy widths, so `mutate`'s
+failure is attributable to the wrapping rather than to the narrow field.
+
+**`mutate_field` is R-4 itself, not merely its class** — `proof_core` with the
+saturating output field reverted to the truncating original. The historical bug
+is reproduced by a solver, and the shipped design rejects it.
+
+Every mutant is generated from the real RTL on each run and never committed;
+the generator exits non-zero if its pattern stops matching, because a mutation
+that silently fails to apply yields a mutant identical to the original, which
+then passes, which reads as a healthy fault injection. Verified in both
+directions — reformatting the RTL fires the guard, and restoring saturation in
+the mutant makes `run.py` exit 1.
 
 ⚠️ **Worth knowing before trusting any bounded timing or datapath check:** the
 wrapping mutant *passes* a bounded run at the shipping widths. The rail is
@@ -238,10 +250,17 @@ The counterexample is R-4 in miniature: the accumulator handed the larger term
 every cycle wraps past the negative rail and lands far *below* the one handed
 the smaller term, inverting the ordering the guarantee rests on.
 
-⚠️ **This is the accumulator stage, not the inference.** Composition over the
-remaining stages — arithmetic shift, ReLU, clamp, the output field — is still
-the hand argument above. A proof over the full 896-cycle streaming datapath has
-not been attempted. Do not describe the guarantee as formally verified.
+⚠️ **Two lemmas are proved; the composition is not.** `monotone_field` covers
+one control sequence — a single-term Mode A inference — and within it all shift
+values, all non-negative weights and all activation pairs. It does **not** cover
+arbitrary control, multi-term streams, or Mode B: a Mode B inference is 896
+cycles and this is a 2-safety property, so it would be two copies of the core
+over that horizon. Composition across a whole network is still the hand
+argument above. **Do not describe the guarantee as formally verified.**
+
+⚠️ **Engine choice is not a detail here.** yices does not close
+`monotone_field` in ten minutes; boolector does in about twenty seconds. Before
+concluding a property is intractable, try the other engine.
 
 **An unconstrained fit does not satisfy it** — 4 of 8 hidden units disagree on
 carbohydrate, 3 on fibre. Monotonicity must be trained for.

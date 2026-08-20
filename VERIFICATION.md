@@ -79,9 +79,13 @@ one's term always dominates the other's. A wrapping mutant is required to fail,
 and the real design at the mutant's widths is required to pass, so the proof is
 not vacuous. RESULTS.md 3 has the table and the counterexample.
 
-The other three bullets are still hand arguments, and composition over the whole
-896-cycle inference has not been proved. **Do not call the guarantee formally
-verified.**
+A second proof, `monotone_field`, carries the property end to end through
+`src/proof_core.v` to the value the host reads, for a single-term Mode A
+inference -- the place R-4 broke. Reverting the R-4 fix makes it fail, so the
+historical bug is reproduced by a solver and the shipped design rejects it.
+
+Composition over a whole network is still the hand argument, and Mode B is out
+of reach for bounded checking. **Do not call the guarantee formally verified.**
 
 ### 1.2 What the study found
 
