@@ -385,14 +385,22 @@ compiled `-DFUNCTIONAL -DSIM` with no timing at all.
 
 The flow already writes a post-route SDF per corner — it is in the `GDS_logs`
 artifact under `runs/wokwi/final/sdf/`, not in `tt_submission`, which is why
-the stock `gl_test` job cannot see it. Annotated, **all 43 top-level tests pass
-bit-exactly at all three corners** at the signed-off 20 ns period:
+the stock `gl_test` job cannot see it. Annotated, **the top-level suite passes
+bit-exactly at all three corners** at the signed-off 20 ns period, with zero
+failures and zero SDF diagnostics:
 
-| corner | SDF | result | SDF diagnostics |
-|---|---|---|---|
-| `nom_slow_1p08V_125C` | slow, 1.08 V, 125 °C | **43/43** | 0 |
-| `nom_typ_1p20V_25C` | typical, 1.20 V, 25 °C | **43/43** | 0 |
-| `nom_fast_1p32V_m40C` | fast, 1.32 V, −40 °C | **43/43** | 0 |
+| corner | SDF | in CI | locally | SDF diagnostics |
+|---|---|---|---|---|
+| `nom_slow_1p08V_125C` | slow, 1.08 V, 125 °C | **42 pass, 1 skip** | **43/43** | 0 |
+| `nom_typ_1p20V_25C` | typical, 1.20 V, 25 °C | **42 pass, 1 skip** | **43/43** | 0 |
+| `nom_fast_1p32V_m40C` | fast, 1.32 V, −40 °C | **42 pass, 1 skip** | **43/43** | 0 |
+
+The skip is `test_trained_network_on_silicon`, for the documented reason: the
+trained weights are derived from CGMacros, which is CC BY-NC-SA, so they are
+gitignored and CI has no `weights.json`. Zero failures either way. Quote the CI
+column when describing what a third party can reproduce from the repository
+alone, and the local column only with the caveat that it needs weights the
+repository does not ship.
 
 **Measured clock-to-output at the pins: 1975 ps** at the slow corner
 (`test_sdf.py`, worst over an inference). That is a simulated timing number,

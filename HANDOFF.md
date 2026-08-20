@@ -33,23 +33,25 @@ seniors).
 | Coverage | **54/54** named bins, asserted not printed |
 | Silicon | 168 flops, 1443 cells, **83.53 %** utilisation |
 | Timing | setup +10.08 ns, hold +0.120 ns @ 20 ns (STA — still the only thing that checks these) |
-| Gate level | 43/43 functional (CI). SDF back-annotated: 43/43 at all three corners **measured locally only** — see the warning below |
+| Gate level | functional pass (CI). SDF back-annotated: pass at all three corners, 0 failures, 0 SDF diagnostics. CI skips 1 of 43 (trained weights are gitignored); 43/43 locally |
 | Latency | **896 cycles** = 17.9 µs @ 50 MHz, **32.0 nJ** per prediction |
 | Signoff | 0 DRC / 0 LVS / 0 latches / 0 lint / 0 antenna |
 | `gds`, `precheck`, `gl_test`, `viewer` | pass |
-| `gl_test_sdf` | **never run in CI** — the job exists only in the working tree |
+| `gl_test_sdf` | pass, all three corners — **on the `gate-level-sdf` branch; not merged to `main`** |
 
-⚠️ **Read this before quoting the SDF numbers.** The whole of the SDF
-back-annotation work — `test/sdf_prep.py`, `test/test_sdf.py`, the
-`gl_test_sdf` job, and the RESULTS.md §6.1 figures including the 1975 ps
-clock-to-output — exists **only in the working tree**. `HEAD` is `31890ed` and
-every green run is at that commit, i.e. before any of it. The three-corner
-result was measured on the development machine via `test/run.py`, with Icarus
-14 from oss-cad-suite; CI uses Icarus 13 and has never run the job. Treat
-§6.1 as measured-but-not-reproduced until a green `gl_test_sdf` exists.
-*(This table said `gl_test_sdf | pass` on 2026-08-19. It had never run. Work
-that exists only on disk has not been verified — the same rule that caught the
-stale latency figure.)*
+⚠️ **The SDF work lives on the `gate-level-sdf` branch, not on `main`.** `main`
+is still `31890ed`. All four workflows are green on the branch, `gl_test_sdf`
+included, on all three corners — so §6.1 is CI-reproduced, not just measured
+locally. It is not merged.
+
+Worth recording because it is the cross-check that mattered: CI runs Tiny
+Tapeout's **Icarus 13**, the development machine runs oss-cad-suite's **14**,
+and both measure clock-to-output at **1975 ps** with identical `sdf_prep.py`
+conversion counts. The figure is not an artefact of one simulator version.
+
+*(This table briefly said `gl_test_sdf | pass` on 2026-08-19, before the job
+had ever run. Work that exists only on disk has not been verified — the same
+rule that caught the stale latency figure.)*
 
 `viewer` **passes** as of the 2026-08-19 run — all four `gds` jobs are green.
 *(This paragraph said it fails because GitHub Pages is not enabled, and that
