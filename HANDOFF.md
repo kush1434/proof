@@ -132,8 +132,19 @@ Related work checked across five angles (four on 2026-08-15, one on 2026-08-18)
 — nothing collides. The fifth found the closest hardware neighbour yet, SoftSNN
 (DAC 2022), which bounds weight magnitudes in hardware against soft errors; the
 paper cites it and draws the distinction.
-`RESULTS.md` §9 has the table and the nearest neighbours. **Five searches is
-weak evidence; phrase novelty as "to our knowledge" and mean it.**
+`RESULTS.md` §9 has the table and the nearest neighbours. A sixth search on
+2026-08-20 again found **no collision**. **Six searches is still weak evidence;
+phrase novelty as "to our knowledge" and mean it.**
+
+⚠️ **The sixth search found something more important than a collision.** Liu et
+al. — already cited — name this exact predicate `sign verification` and publish
+evidence that MILP-certified monotone networks systematically fail it. So the
+guard is **sound, not complete**: it raises `UNTRUSTED` on genuinely monotone
+models at a rate nobody here has measured. RESULTS.md §1.3 has always said the
+condition is sufficient, not necessary; **the paper does not say it anywhere.**
+That is the sharpest objection available against the contribution, it is armed
+by the paper's own citation, and it is answerable in two sentences. See
+RESULTS.md §9.1. It is the highest-value paper edit outstanding.
 
 ⚠️ **State §1.3 precisely.** An unconstrained fit never satisfies the sign
 condition — the *population* model already fails ~3 of 8 units. Personalisation

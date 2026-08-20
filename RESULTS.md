@@ -630,6 +630,69 @@ but the surviving claim is narrow and must be stated as such.
 | Hardware that inspects incoming weights | **SoftSNN** (Putra, Hanif & Shafique, DAC 2022) bounds weight *magnitudes* against a threshold in hardened logic | **The closest hardware neighbour found, and still distinct.** Its threat model is soft errors — is this value *corrupted*? Ours is an untrusted host, with the weights perfectly intact. And the sign condition is a relation *between* two weights in different layers, which no per-weight bound can express. Cite it: a reviewer from the fault-tolerance community will think of it immediately. |
 | Runtime safety monitoring | *Run-Time Safety Monitoring of NN-Enabled Dynamical Systems* | System-level, software, monitors **outputs** — not a precondition on weights. |
 
+### 9.1 The predicate has a published name, and published evidence against it
+
+*(Found 2026-08-20, sixth search. This is the most consequential related-work
+finding of the project, and it comes from a paper already in the bibliography.)*
+
+**Liu et al. (NeurIPS 2020) name this exact predicate `sign verification`, and
+show their own certified networks failing it.** Verified verbatim in the paper's
+§4, not from a summary:
+
+> "a neural network can be verified to be monotonic by just reading the sign of
+> the weights (call this **sign verification**) if the product of the weights of
+> all the paths connecting the monotonic features to the outputs are positive.
+> Let us take a two-layer ReLU network, f = W2ReLU(W1x) ... we can verify the
+> monotonicity of the network if all the elements in the matrix **W2W1 is
+> non-negative** without our MILP formulation. ... As shown in Table 5 and
+> Fig. 4.1, **our method tends to learn neural networks that cannot be trivially
+> verified by sign verification**, suggesting that it learns in a richer space
+> of monotonic functions."
+
+Three consequences, in order of how much they matter:
+
+1. **The sign condition is sufficient, not necessary — and the guard is
+   therefore conservative.** RESULTS.md §1.3 and VERIFICATION.md §1.3 have
+   always said so. **The paper does not.** A reviewer holding the citation the
+   paper itself supplies can point out that the device raises `UNTRUSTED` on
+   genuinely monotone models, at a rate this project has never measured. That
+   is the sharpest objection to the contribution, and it is currently
+   unanswered in the paper.
+2. **The name should be attributed.** Using `sign verification` and crediting
+   Liu et al. costs a few words and converts an "did you know this has a name?"
+   objection into evidence of a careful reading.
+3. **The framing that answers it is already true.** The chip is *sound, not
+   complete*: it vouches for the model class it can check at its own interface
+   for 20 flip-flops. Liu et al.'s MILP certification is offline and costly —
+   exactly what a device handed new weights per patient cannot do. And the
+   by-construction literature (Runje & Shankaranarayana; Kim & Lee) produces
+   models *inside* the admissible class, which is where the shipped
+   reparameterised model sits by construction. Conservativeness is the price of
+   checkability at the interface, and it should be stated as a choice rather
+   than discovered by a reviewer.
+
+**A near-neighbour worth adding: proof-carrying hardware.** Drzevitzky, Kastens
+& Platzner, *Proof-Carrying Hardware: Towards Runtime Verification of
+Reconfigurable Modules*, ReConFig 2009, pp. 189–194
+(<https://dl.acm.org/doi/10.1109/ReConFig.2009.31>); extended in *Int. J.
+Reconfigurable Computing* 2010, art. 180242. Four of five independent search
+angles converged on it. Same argument shape — an untrusted producer supplies an
+artefact and the consumer validates a safety property at its own boundary
+before instantiating it. **It does not collide:** the artefact is a *circuit*,
+the check consumes an externally supplied *certificate* in a software
+proof-checker at configuration time, and the property is design-level rather
+than an input–output guarantee about data. Existence and concept verified;
+the full text was not read.
+
+⚠️ **Leads from the same search, NOT independently verified — check before
+citing anything here.** WAVE (ASPLOS 2026) on architecture-level model
+oversight from performance counters; zero-knowledge property proofs over
+weights (FairProof, ICML 2024; PANDA, arXiv 2608.17070); and elliptic-curve
+point validation as prior art for hardware checking a *relation* among supplied
+values. The ECC one is worth understanding but does **not** hit the paper's
+actual sentence, which is scoped to what "no per-weight bound or checksum can
+express" and survives.
+
 ### The gap, stated precisely
 
 Every monotonicity guarantee above is established **at training time and verified
@@ -674,6 +737,14 @@ neighbours a reviewer will reach for.
 - ❌ "The truncation bug endangers patients." Not reachable on real data.
 - ❌ "We invented monotonic networks." Established field — cite Liu et al.
   (NeurIPS 2020), Runje & Shankaranarayana (ICML 2023).
+- ❌ **"UNTRUSTED means the model is non-monotone."** It does not. It means the
+  weight set does not admit the guarantee *by the sign condition*, which is
+  **sufficient but not necessary** for monotonicity. Liu et al. — cited in the
+  paper — name this predicate `sign verification` and show MILP-certified
+  monotone networks systematically failing it (§9.1). The chip is sound, not
+  complete, and the rate at which it would reject genuinely monotone models has
+  never been measured here. Say "does not admit the guarantee", never "is not
+  monotone".
 - ⚠️ "To our knowledge" is doing real work in the guard claim. **Five** targeted
   searches (§9, the fifth on 2026-08-18) found no prior hardware that checks a
   monotonicity precondition at its own interface, but absence of evidence in five
