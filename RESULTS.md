@@ -186,6 +186,19 @@ reproduces the documented 15/16/14 exactly):
 | T2D | 14 | 360 | +0.142 | 2329 | 4603 |
 | **overall** | 45 | 1308 | **+0.225** | | |
 
+Cohort mean iAUC over the same 1308 meals is **3150 mg/dL·min**
+(`clinical.py`). That is the denominator §5’s quantisation error should be read
+against: a mean error of 85 is 2.7 % of it.
+
+⚠️ Corrected 2026-08-24. `clinical.py` printed “mean iAUC across the cohort is
+~2900” as a **hardcoded literal inside an f-string**, while every other value on
+that line was computed — so it read as produced output and was not, and the paper
+quoted it. Computed, it is 3150; the subgroup table above already implied that
+(463×2023 + 485×3148 + 360×4603) / 1308. The “~3 % of a typical iAUC” reading in
+§5 is unchanged. This is the same failure class as the four found on 2026-08-15,
+one level down: a number that survives a re-derivation pass *because* it appears
+in script output.
+
 Absolute error grows with severity, but so does the response being predicted.
 Per-group R² is not directly comparable across groups because within-group
 variance differs.
@@ -613,7 +626,9 @@ further is a 1×2 tile conversation.
 
 ## 9. Related work, and what is actually new
 
-Checked 2026-08-15 across four independent angles, and a fifth on 2026-08-18.
+Checked 2026-08-15 across four independent angles, a fifth on 2026-08-18 and a
+sixth on 2026-08-20 — **six** in total, which is the number every document and
+the paper must carry.
 **Nothing found collides**,
 but the surviving claim is narrow and must be stated as such.
 
@@ -716,7 +731,7 @@ nothing in the CED literature, can tell.
 
 ### Honesty about the search
 
-Five targeted searches found no prior hardware checking a semantic precondition
+Six targeted searches found no prior hardware checking a semantic precondition
 on streamed weights. That is **weak evidence** — phrase it as "to our knowledge"
 and mean it, and treat the CED and runtime-monitoring literature as the nearest
 neighbours a reviewer will reach for.
@@ -745,13 +760,16 @@ neighbours a reviewer will reach for.
   complete, and the rate at which it would reject genuinely monotone models has
   never been measured here. Say "does not admit the guarantee", never "is not
   monotone".
-- ⚠️ "To our knowledge" is doing real work in the guard claim. **Five** targeted
-  searches (§9, the fifth on 2026-08-18) found no prior hardware that checks a
-  monotonicity precondition at its own interface, but absence of evidence in five
+- ⚠️ "To our knowledge" is doing real work in the guard claim. **Six** targeted
+  searches (§9, the sixth on 2026-08-20) found no prior hardware that checks a
+  monotonicity precondition at its own interface, but absence of evidence in six
   searches is still weak. Phrase it as a limitation of the search, not as established priority.
   *(This bullet said "two" until 2026-08-15, when §9 and HANDOFF both said
   four; the fifth search on 2026-08-18 moved all three to five. The paper said
   "four literature searches" until 2026-08-19 — the same count drifting for a
-  third time, in a fourth document. `check_numbers.py` now holds the retired
-  phrasing, because a correction note is exempt from that gate and so this
-  line could never have caught itself.)*
+  third time, in a fourth document. **Corrected again 2026-08-24, a fourth
+  drift:** §9.1 recorded a sixth search on 2026-08-20 and HANDOFF said six,
+  while this bullet, §9 and the paper all still said five. `check_numbers.py`
+  now retires "five literature searches" as well, but note the limit of that
+  gate — it only fires on the paper's exact phrasing, and a correction note is
+  exempt, so this line still cannot catch itself.)*

@@ -103,13 +103,24 @@ transcribed:
 The layout render was cut only to reach 5 pages. Table~I already carries every
 number it illustrated, and it is worth restoring for any venue with more room.
 
-**Still open, and only Kush can close them:**
+**Both of these closed 2026-08-24/25, and neither has been through CI yet.**
 
-- the author block is a placeholder — authorship is undecided. Note the braces
-  in `{[email]}`: a line break followed by a bare `[` is a fatal parse error,
-  and it cost one CI compile already;
-- `\bibitem{tinytapeout}` needs whatever citation form the maintainers prefer
-  (every other reference was checked against the publication itself).
+- the author block is filled in — Kush Shah, Del Norte High School, San Diego,
+  USA, kushshah.edu@gmail.com, **sole author, high school track**. The braces
+  around the email are still load-bearing: a line break followed by a bare `[`
+  is a fatal parse error, and it cost one CI compile already;
+- `\bibitem{tinytapeout}` now cites the IEEE Solid-State Circuits Magazine
+  paper — M. Venn, vol. 16, no. 2, pp. 20–29, 2024, doi 10.1109/MSSC.2024.
+  3381097. ⚠️ **Verified more weakly than the other seven.** Those were checked
+  against the publication itself; this is two independent searches plus the
+  maintainer's own post naming the venue (IEEE Xplore doc 10584359). Xplore
+  and ResearchGate both refused to load. Confirm on Xplore before submitting.
+
+**The page count is now the open question.** The paper compiled to exactly 5
+pages at `eee649e` with 3365 body words. The working tree is 3361 — four words
+under, with the author block filled in and every addition paid for by a named
+cut. That is a proxy, not a measurement: only the `paper` workflow knows the
+real number. **Push and read `pdfinfo` before believing any of this.**
 
 ---
 
@@ -319,12 +330,25 @@ above are the ones still worth acting on.
 
 **Kush's to do:**
 
-- Fill in the author block; decide authorship. An adult co-author is allowed and
-  must not be primary contributor, but **cannot present in his place**; the rule
-  names a *student* author.
-- Confirm the `\bibitem{tinytapeout}` citation form — the only unverified
-  reference.
-- **Submit to Tiny Tapeout.** RTL freezes there.
+- ~~Fill in the author block~~ done 2026-08-25: sole author, HS track.
+- ~~Confirm the `\bibitem{tinytapeout}` citation form~~ done 2026-08-25, but
+  confirm it on IEEE Xplore (doc 10584359) — the one reference not checked
+  against the publication itself.
+- **Push, and read the page count off the `paper` workflow.** Nothing else about
+  the paper is knowable until that runs.
+- **Register on the submission portal**, `wi-lab.com/cyberchair/2026/bibm26`.
+  The CFP is explicit: review is single-blind, deadline **31 August 2026,
+  11:59 PM AoE**, page limit **6 for undergraduate, 5 for high school** — so the
+  track selection sets the limit this paper has been built against. Notification
+  22 September. "At least one student author must attend and present; otherwise
+  the paper will not appear in the IEEE proceedings."
+- **Submit to Tiny Tapeout.** RTL freezes there. Verified 2026-08-25 on
+  tinytapeout.com/chips/: TTIHP26b launched 2026-07-27, **closes 2026-09-21**,
+  chips expected 2027-08-16. (The site homepage renders a countdown that reads
+  as a much later date; the shuttle table is the authority.) `src/` is
+  byte-identical to `main` and to `c0a5792`, whose GDS produced the 83.53 %
+  figure, and `main` is an ancestor of `gate-level-sdf`, so the merge is a
+  fast-forward with no silicon risk.
 - Decide on Dallas, 1–4 December. In-person only, no virtual option, and a
   parent must accompany him. **Conflicts with ASGSR, 2–5 December, Virginia.**
   The symposium is one day inside 1–4 Dec but the date is still `TBD` — worth
