@@ -132,8 +132,12 @@ def main():
 
     print()
     print("  RESULTS.md 1.2 records, against width 8:")
-    print("    4  +0.016 [-0.023, +0.055] | 6  +0.029 [-0.010, +0.068] "
-          "| 12  +0.001 [-0.029, +0.030]")
+    print("    carbs up (shipped): 4 +0.012 [-0.005, +0.030] | "
+          "6 +0.004 [-0.027, +0.035] | 12 -0.022 [-0.059, +0.015]")
+    print("    unconstrained     : 4 -0.015 [-0.021, -0.008] | "
+          "6 -0.003 [-0.026, +0.021] | 12 +0.014 [-0.006, +0.034]")
+    print("    width 4 is measurably worse than 8 for the unconstrained")
+    print("    model only -- the blanket claim belongs to the shipped one.")
     print("=" * 74)
 
 

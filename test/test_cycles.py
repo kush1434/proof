@@ -4,7 +4,7 @@
 
 WHY THIS FILE EXISTS
 --------------------
-RESULTS.md 6 and the paper both quote "914 cycles = 18.3 us @ 50 MHz", and the
+RESULTS.md 6 and the paper used to quote "914 cycles = 18.3 us @ 50 MHz", and
 energy figure is derived from it (place-and-route power x that time). The only
 surviving trace of where 914 came from was test/results_test_cycles.xml, whose
 `file` attribute names a test/test_cycles.py that was never committed and no

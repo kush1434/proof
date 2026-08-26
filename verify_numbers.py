@@ -118,6 +118,15 @@ CHECKS = [
     ("ablation, all 5 bio features", "ablation",
      r"\+ all 5 bio\s+\d+\s+\d+\s+([+-][\d.]+)",
      r"\|\s*\+ all 5 bio\s*\|\s*\*\*([+-][\d.]+)\*\*"),
+
+    # Added 2026-08-25. clinical.py printed this as a hardcoded ~2900 inside
+    # an f-string whose every other value was computed, so it read as produced
+    # output and was not -- and the paper quoted it. check_numbers.py catches
+    # the retired value propagating; only this catches the computed one
+    # drifting, which is the half that gate cannot do.
+    ("cohort mean iAUC", "clinical",
+     r"mean iAUC across the cohort is\s+(\d+)",
+     r"Cohort mean iAUC over the same 1308 meals is \*\*(\d+) mg/dL"),
 ]
 
 DASHES = {ord(c): "-" for c in "‐‑‒–—―−"}

@@ -53,6 +53,17 @@ DOCS = [
     "HANDOFF.md",
     "docs/info.md",
     "paper/proof_bibm2026.tex",
+    # Scripts that quote a RESULTS.md figure back at the reader are
+    # documents too. Added 2026-08-24, after model/ablation.py was found
+    # printing the pre-rerun Spearman block and a claim RESULTS.md 5
+    # explicitly warns against -- neither visible to a gate that only
+    # reads .md and .tex. The paper invites reviewers to run these.
+    "model/ablation.py",
+    "model/clinical.py",
+    "model/sign_condition.py",
+    "model/width_sweep.py",
+    "test/monotonicity.py",
+    "test/test_cycles.py",
 ]
 
 # label -> (current value as it appears in prose, producing script)
@@ -69,6 +80,7 @@ CANONICAL = [
     ("standard cells",         "1443",    "gds metrics.csv"),
     ("top-level tests",        "43",      "test/run.py"),
     ("clock-to-output",        "1975",    "test/run.py --gates --sdf ... --module test_sdf"),
+    ("cohort mean iAUC",       "3150",    "model/clinical.py"),
 ]
 
 # (retired value, its replacement, why). The replacement matters: a line
@@ -100,10 +112,26 @@ RETIRED = [
     ("41, all bit-exact", "43, bit-exact", "top-level test count"),
     ("four literature searches", "five literature searches",
      "search count, before the 2026-08-18 SoftSNN pass"),
+    # Fourth drift of the same count, found 2026-08-24: RESULTS 9.1 and
+    # HANDOFF said six after the 2026-08-20 pass while 9, 10 and the paper
+    # still said five.
+    ("five literature searches", "six literature searches",
+     "search count, before the 2026-08-20 pass"),
     # The gate-level run is no longer timing-free. Any document still saying so
     # is behind RESULTS.md 6.1.
     ("no SDF back-annotation", "post-route SDF",
      "gate-level sim was functional-only until 2026-08-19"),
+    # width_sweep.py printed these back as what RESULTS.md 1.2 records,
+    # while 1.2 had recorded the measured values since 2026-08-15. Paired
+    # with their lower bound so a bare 0.016 elsewhere cannot trip them.
+    ("+0.016 [-0.023", "+0.012 [-0.005", "width-4 delta vs 8, pre-rerun"),
+    ("+0.029 [-0.010", "+0.004 [-0.027", "width-6 delta vs 8, pre-rerun"),
+    # Not a superseded measurement but a value that was never measured at
+    # all: clinical.py printed ~2900 as a literal inside an f-string whose
+    # every other value was computed, and the paper quoted it. Computed,
+    # it is 3150. Found 2026-08-24 by grepping print() strings for digits
+    # that are not inside a {} interpolation.
+    ("2900", "3150", "cohort mean iAUC, hardcoded and never computed"),
 ]
 
 CORRECTION_MARKERS = (

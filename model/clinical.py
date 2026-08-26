@@ -291,7 +291,8 @@ def main():
     print(f"    held-out meals compared : {quant['n']}")
     print(f"    |float - INT8|  mean {quant['mae']:7.1f}   "
           f"p95 {quant['p95']:7.1f}   max {quant['max']:7.1f}  mg/dL.min")
-    print(f"    for context, mean iAUC across the cohort is ~2900 mg/dL.min")
+    print(f"    for context, mean iAUC across the cohort is "
+          f"{float(np.mean(y)):.0f} mg/dL.min  (n={len(y)} meals)")
 
     print()
     print("  [4] Is the R-4 truncation defect reachable with real meals?")

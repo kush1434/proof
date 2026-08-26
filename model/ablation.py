@@ -145,13 +145,16 @@ def main():
         print("  %-18s %6d %7d %+8.3f %+10.3f %6d/%-4d" % rows[-1])
 
     print()
-    print("  Read the last two columns together: a participant-level feature is")
-    print("  constant within a person, so it CANNOT reorder that person's meals.")
-    print("  Ranking is the use case.")
+    print("  Read the last two columns together. A participant-level feature is")
+    print("  constant within a person, but this is an MLP, so it still interacts")
+    print("  with the meal features and CAN reorder that person's meals -- and")
+    print("  measurably does, in both directions. Ranking is the use case.")
     print()
-    print("  RESULTS.md 5 records (feature set not named there, so not directly")
-    print("  comparable): 6 meal +0.236 / +0.403 / 40 of 44;  + A1c +0.271;")
-    print("  + A1c + BMI +0.224;  + all 5 bio -0.005")
+    print("  RESULTS.md 5 records, R2 / median rho / ranked correctly:")
+    print("    6 meal        +0.225 / +0.382 / 41/44")
+    print("    + A1c         +0.256 / +0.395 / 37/44")
+    print("    + A1c + BMI   +0.207 / +0.463 / 40/44")
+    print("    + all 5 bio   -0.014 / +0.440 / 42/44")
     print("=" * 78)
 
 
