@@ -19,9 +19,14 @@
 % >>> stale and are corrected here, and three claims changed once the missing
 % >>> measurement scripts were written.
 % >>>
-% >>> STILL OPEN:
-% >>>   - the author block is a placeholder (authorship undecided)
-% >>>   - \bibitem{tinytapeout} has no canonical paper; confirm the form
+% >>> CLOSED 2026-08-24: author block filled in, sole author, HS track.
+% >>> CLOSED 2026-08-25: ibitem{tinytapeout} now cites the IEEE SSC
+% >>>   Magazine paper (vol 16 no 2 pp 20-29, 2024, doi 10.1109/MSSC.2024.
+% >>>   3381097). CAVEAT: the other seven references were checked against
+% >>>   the publication itself; this one is from two independent searches
+% >>>   plus the maintainer's own post naming the venue. IEEE Xplore and
+% >>>   ResearchGate both refused to load. Confirm on Xplore doc 10584359
+% >>>   before submitting -- it is a 30-second check.
 % >>> The paper compiles in CI (the `paper` workflow) to exactly 5 pages, with
 % >>> zero overfull boxes and no undefined references. Download the PDF from any
 % >>> green run. Sitting on the limit exactly, filling in the author block is the
@@ -47,12 +52,11 @@ A Glycemic-Response Inference Chip for Streamed Per-Patient Weights}
 % "Missing number, treated as zero". Keep them when the placeholder is filled
 % in, or start the line with anything other than a bracket.
 \author{\IEEEauthorblockN{Kush Shah}
-\IEEEauthorblockA{\textit{[affiliation]}\\
-\textit{[city, country]}\\
-{[email]}}
-% NOTE: authorship is undecided. The symposium rule names a *student* author;
-% an adult co-author is permitted but must not be the primary contributor and
-% cannot present in the student's place.
+\IEEEauthorblockA{\textit{Del Norte High School}\\
+\textit{San Diego, USA}\\
+{kushshah.edu@gmail.com}}
+% Sole author, high school track (5-page limit). The symposium rule requires
+% a student author to attend and present, or the paper is not published.
 }
 
 \maketitle
@@ -67,7 +71,7 @@ fixed-point inference ASIC for the IHP SG13G2 open PDK that holds no weights at
 all: every one arrives from an untrusted host, so the model can be per-patient.
 That breaks the offline assumption. Fine-tuning an unconstrained network on
 each held-out participant of the CGMacros cohort violates the sign condition
-monotonicity depends on in 44 of 44 cases, stably across a twentyfold range of
+our guarantee rests on in 44 of 44 cases, stably across a twentyfold range of
 fine-tuning budgets, so the chip checks its own precondition at the pin
 interface for 20 flip-flops, carrying one sign bit and one non-zero bit per
 hidden unit in registers that rotate in lockstep with the hidden activations.
@@ -93,8 +97,8 @@ one?} Continuous glucose monitoring has made the answer measurable after the
 fact, and a small model over meal macronutrients can estimate it beforehand.
 What makes such a model usable rather than merely accurate is that it behave
 sensibly: adding carbohydrate to a meal must never lower the predicted
-response. A model that violates this is not just wrong on one input, it is
-incoherent as advice, and no aggregate accuracy figure repairs that.
+response. A model that violates this is not merely wrong, it is incoherent as
+advice, and no aggregate accuracy figure repairs that.
 
 Monotonic-by-construction networks are a mature field, and certifying
 monotonicity of a trained network is well studied. Both share an assumption
@@ -110,13 +114,16 @@ $1\times1$ Tiny Tapeout~\cite{tinytapeout} tile on the IHP SG13G2 open
 PDK~\cite{ihp}, but its consequence is that the weights can be
 \emph{per patient}: the same silicon, a different model for each person. An
 offline certificate covers the weight set it was computed for and nothing else.
+The host is untrusted in a modest sense: we do not assume it used the
+constrained objective we train with, and the weight stream does not reveal
+whether it did.
 
 This paper makes four claims. Per-patient weights are worth having: refitting
 one parameter from about eight logged meals---three days---improves
 per-participant error by a margin whose 95\,\% interval excludes zero, while
 refitting from a single meal is measurably \emph{worse} than not personalising
 at all (Fig.~\ref{fig:personalisation}). Monotonicity's precondition really does
-fail: an unconstrained per-person refit violates the sign condition it rests on
+fail: an unconstrained per-person refit violates the sign condition our argument rests on
 in 44 of 44 participants. It is nevertheless checkable in hardware, from the weight stream
 itself, for 20 flip-flops, because both operands already cross the pins
 (Fig.~\ref{fig:arch}). And such a property can hold internally while breaking
@@ -133,7 +140,11 @@ monotonicity by reparameterising weights through a non-negative
 map~\cite{runje2023,scalable2024} are an established family; the softplus
 reparameterisation we train with is squarely in it and is not a contribution
 here. Liu et al.~\cite{liu2020} instead certify a trained network by
-mixed-integer programming --- offline, on a fixed model, and costly.
+mixed-integer programming --- offline, on a fixed model, and costly. They also
+name the predicate we check, \emph{sign verification}, and report that their
+certified networks often fail it. The condition is sufficient, not necessary, so
+our guard is sound but not complete: it declines monotone weight sets it cannot
+check at a pin interface, at a rate we do not measure.
 
 \textbf{Quantization versus structural guarantees.} Recent work asks whether
 quantization preserves monotone-operator properties~\cite{quantmon2026}. It is
@@ -143,9 +154,8 @@ hardware. Formal verification of quantized networks~\cite{qvip2022} is likewise
 offline, and verifies the network rather than the interface it arrives through.
 
 \textbf{Hardware that inspects weights.} Accelerators are commonly protected by
-algorithmic checksums descended from ABFT~\cite{huang1984}, applied to DNN
-layers at low cost~\cite{ozen2020}, and by schemes targeting permanent faults
-in systolic arrays~\cite{zhang2018}. Closest to us in mechanism, SoftSNN bounds
+algorithmic checksums descended from ABFT~\cite{huang1984,ozen2020} and by
+permanent-fault schemes~\cite{zhang2018}. Closest to us in mechanism, SoftSNN bounds
 incoming weight \emph{magnitudes} against a threshold in hardware~\cite{putra2022}.
 The distinction is not one of degree. Those techniques ask whether a value was
 \emph{corrupted}; we ask whether an intact weight set \emph{admits the guarantee
@@ -157,7 +167,7 @@ safety monitoring~\cite{xiang2022} is closer in spirit but operates at system
 level, in software, on \emph{outputs}.
 
 To our knowledge no prior hardware checks a semantic precondition on a streamed
-weight set at its own interface. That rests on five targeted literature
+weight set at its own interface. That rests on six targeted literature
 searches, which is weak evidence; we state it as a limitation of the search
 rather than as priority, and regard weight-bounding and run-time monitoring as
 the nearest neighbours.
@@ -194,8 +204,7 @@ $8\times8$ multiplier and a 24-bit accumulator; only the source of the
 activations differs. In layer~1 the host supplies them, re-streaming the input
 vector per hidden neuron---48 bytes rather than 6, saving 48 flip-flops at a
 bandwidth cost that is free at meal timescales. In layer~2 the chip supplies
-them from the hidden-activation register, following them with the constants 127
-and 1 so that a bias is $v_8 \cdot 127 + v_9$ with no bias-specific logic.
+them from the hidden-activation register.
 
 \subsection{The monotonicity argument, and where it broke}
 
@@ -287,11 +296,10 @@ saturation-specific mutant could hide behind the guard.
 
 The guard covers carbohydrate only. We built and measured a second guard for
 the fibre direction and declined it: 187 flip-flops against 168, extrapolating
-to roughly 87\,\% utilisation, too close to the edge for a tile that currently
-routes clean, and it buys the weaker of the two claims---fibre's direction is
-domain knowledge our data supports only marginally ($r=-0.051$). That guarantee
-therefore still relies on the host using a constrained objective, and we say so
-rather than implying otherwise.
+to roughly 87\,\% utilisation, too close to the edge, and it buys the weaker of
+the two claims---fibre's direction is domain knowledge our data supports only
+marginally ($r=-0.051$). That guarantee therefore still relies on the host using
+a constrained objective.
 
 \section{Data and Training}
 
@@ -299,8 +307,7 @@ We use CGMacros~\cite{cgmacros}, 45 participants with concurrent continuous
 glucose monitoring and photographed, macronutrient-labelled meals. The target is
 two-hour incremental area under the glucose curve. Splits are grouped by
 participant throughout; a random row split would place one person's meals on
-both sides and inflate every number, because individual response is exactly what
-varies most.
+both sides and inflate every number, since individual response varies most.
 
 Two undocumented data-quality problems needed handling: \texttt{Meal Type}
 carries ten label strings for four meal types, so filtering on
@@ -328,7 +335,7 @@ width from 4 to 12 is distinguishable from 8 for the constrained model that
 ships, so the model is data-limited rather than capacity-limited. Quantisation
 scales were selected by search over a held-out fold, giving a mean float-to-INT8
 error of 85 and a 95th percentile of 180 mg/dL$\cdot$min over 265 held-out meals
-against a cohort mean response near 2900---though the maximum is 7305, on a
+against a cohort mean response of 3150---though the maximum is 7305, on a
 single meal.
 
 Monotone models are trained by reparameterisation rather than penalty, so the
@@ -398,7 +405,7 @@ not survive correction for the roughly ten comparisons made across this project.
 
 Cross-fitting so that all 45 participants are held out exactly once
 (1308 meals), out-of-fold $R^2$ is $+0.225$. The use case is within-person
-ranking---\emph{should I swap this ingredient?}---and there the median Spearman
+ranking, and there the median Spearman
 correlation is $+0.382$ (IQR $+0.215$ to $+0.495$), positive in 41 of 44
 participants. By glycemic status (ADA A1c thresholds), $R^2$ is $+0.074$ for
 15 healthy, $+0.077$ for 16 pre-diabetic and $+0.142$ for 14 type~2 diabetic
@@ -488,7 +495,7 @@ synthetic weight sets, but we make no claim of patient harm on real data.
 The chip is a $1\times1$ tile fabricated on a shared multi-project wafer, and
 we report pre-silicon signoff results, not measurements from returned parts.
 
-\textbf{Novelty is asserted from five literature searches}, which is weak
+\textbf{Novelty is asserted from six literature searches}, which is weak
 evidence.
 
 \textbf{This is not a medical device.} Every output is an estimate.
@@ -501,10 +508,7 @@ someone else's. The failure is not hypothetical---an unconstrained per-person
 refit violates the sign condition in 44 of 44 cases---and the precondition is
 checkable at the interface for 20 flip-flops, because both operands already
 cross the pins. Such a guarantee can also hold throughout a datapath and still
-be destroyed by the fixed-width field that reports it. Concurrent error
-detection asks whether the hardware computed correctly; this asks whether the
-model it was given admits the guarantee at all, and in the failing case the
-arithmetic is perfectly correct.
+be destroyed by the fixed-width field that reports it.
 
 RTL, testbenches, reference models and analysis scripts, including the ones
 that regenerate every figure here, are at
@@ -570,8 +574,9 @@ nutrition and diet monitoring,'' \emph{Scientific Data}, vol.~12, art.~1557,
 2025.
 
 \bibitem{tinytapeout}
-M. Venn, ``Tiny Tapeout: A shared silicon tapeout platform,''
-\url{https://tinytapeout.com}. % confirm preferred citation form
+M. Venn, ``Tiny Tapeout: A shared silicon tape out platform accessible to
+everyone,'' \emph{IEEE Solid-State Circuits Magazine}, vol.~16, no.~2,
+pp.~20--29, 2024.
 
 \bibitem{ihp}
 IHP, ``SG13G2 open source PDK,''

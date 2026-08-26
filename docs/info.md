@@ -34,7 +34,7 @@ value.
 
 ### The chip checks its own safety precondition
 
-The monotonicity property below holds only if the streamed weights satisfy
+The monotonicity property below holds if the streamed weights satisfy
 `W1[j][carb] · W2[j] ≥ 0` for every hidden unit. That is a property of the
 weights, not of the design — and since the host streams a different weight set
 per patient, trusting it is not good enough. Refitting an unconstrained network
