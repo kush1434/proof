@@ -69,10 +69,11 @@ training time and verifies it \emph{offline, on a fixed model}, which is sound
 only while the model is fixed. We describe \emph{Proof}, a $1\times1$-tile
 fixed-point inference ASIC for the IHP SG13G2 open PDK that holds no weights at
 all: every one arrives from an untrusted host, so the model can be per-patient.
-That breaks the offline assumption. Fine-tuning an unconstrained network on
-each held-out participant of the CGMacros cohort violates the sign condition
-our guarantee rests on in 44 of 44 cases, stably across a twentyfold range of
-fine-tuning budgets, so the chip checks its own precondition at the pin
+That breaks the offline assumption. An unconstrained fit never satisfies the
+sign condition our guarantee rests on---the population model already fails it,
+as do all 44 held-out per-participant refits of the CGMacros cohort, across a
+twentyfold range of budgets. Personalisation does not create that gap; it makes
+it undecidable offline. So the chip checks its own precondition at the pin
 interface for 20 flip-flops, carrying one sign bit and one non-zero bit per
 hidden unit in registers that rotate in lockstep with the hidden activations.
 We also report a defect that motivates the approach: the datapath was provably
@@ -93,12 +94,11 @@ response, open-source silicon
 
 People managing type~2 diabetes are routinely asked to make a comparative
 judgement about food: \emph{will this meal raise my blood sugar more than that
-one?} Continuous glucose monitoring has made the answer measurable after the
-fact, and a small model over meal macronutrients can estimate it beforehand.
-What makes such a model usable rather than merely accurate is that it behave
-sensibly: adding carbohydrate to a meal must never lower the predicted
-response. A model that violates this is not merely wrong, it is incoherent as
-advice, and no aggregate accuracy figure repairs that.
+one?} Continuous glucose monitoring makes the answer measurable after the fact,
+and a small model over meal macronutrients can estimate it beforehand. Such a
+model must also behave sensibly: adding carbohydrate must never lower the
+predicted response. A model that violates this is incoherent as advice, and no
+aggregate accuracy figure repairs that.
 
 Monotonic-by-construction networks are a mature field, and certifying
 monotonicity of a trained network is well studied. Both share an assumption
@@ -108,11 +108,12 @@ inherits that certificate.
 
 Our device does not ship one model. \emph{Proof} holds no weights at all: the
 65 learned parameters arrive over the pins for every inference, as 74 INT8
-weight and bias bytes alongside 9 requantisation shift bytes. That began as an
+weight and bias bytes---each bias is carried as two bytes---alongside 9
+requantisation shift bytes. That began as an
 area decision, since the parameters do not fit beside the datapath in a
 $1\times1$ Tiny Tapeout~\cite{tinytapeout} tile on the IHP SG13G2 open
 PDK~\cite{ihp}, but its consequence is that the weights can be
-\emph{per patient}: the same silicon, a different model for each person. An
+\emph{per patient}. An
 offline certificate covers the weight set it was computed for and nothing else.
 The host is untrusted in a modest sense: we do not assume it used the
 constrained objective we train with, and the weight stream does not reveal
@@ -120,12 +121,12 @@ whether it did.
 
 This paper makes four claims. Per-patient weights are worth having: refitting
 one parameter from about eight logged meals---three days---improves
-per-participant error by a margin whose 95\,\% interval excludes zero, while
-refitting from a single meal is measurably \emph{worse} than not personalising
-at all (Fig.~\ref{fig:personalisation}). Monotonicity's precondition really does
-fail: an unconstrained per-person refit violates the sign condition our argument rests on
-in 44 of 44 participants. It is nevertheless checkable in hardware, from the weight stream
-itself, for 20 flip-flops, because both operands already cross the pins
+per-participant error by a margin whose 95\,\% interval excludes zero, while a
+single meal is measurably \emph{worse} than none
+(Fig.~\ref{fig:personalisation}). The precondition really does fail: no
+unconstrained fit we tried satisfies the sign condition, in 44 of 44
+participants. It is nevertheless checkable in hardware for 20 flip-flops,
+because both operands already cross the pins
 (Fig.~\ref{fig:arch}). And such a property can hold internally while breaking
 at the interface---our datapath was provably monotone while the output field
 truncated, and truncation wraps (Fig.~\ref{fig:r4}).
@@ -134,6 +135,11 @@ We are explicit throughout about what the evidence does not support: we do not
 claim the network beats its baseline, and we do not claim monotonicity is free.
 
 \section{Related Work}
+
+\textbf{Personalised glycemic response.} That postprandial response to an
+identical meal varies widely between people, and is predictable from personal
+features, is established~\cite{zeevi2015,berry2020}. We take that premise as
+given; our contribution is its hardware consequence.
 
 \textbf{Monotonicity, established and certified.} Architectures that guarantee
 monotonicity by reparameterising weights through a non-negative
@@ -198,12 +204,11 @@ h &= \mathrm{ReLU}\!\left(\mathrm{clamp}_{0}^{127}\!\left((W_1 x + b_1) \gg s_1\
 y &= (W_2 h + b_2) \gg s_2 ,
 \end{align}
 over INT8 weights and activations with power-of-two requantisation, so
-rescaling is an arithmetic shift and the chip needs no second multiplier. Every
+rescaling is an arithmetic shift. Every
 neuron of both layers is the same saturating dot product over a serial
 $8\times8$ multiplier and a 24-bit accumulator; only the source of the
 activations differs. In layer~1 the host supplies them, re-streaming the input
-vector per hidden neuron---48 bytes rather than 6, saving 48 flip-flops at a
-bandwidth cost that is free at meal timescales. In layer~2 the chip supplies
+vector per hidden neuron to save 48 flip-flops. In layer~2 the chip supplies
 them from the hidden-activation register.
 
 \subsection{The monotonicity argument, and where it broke}
@@ -289,22 +294,21 @@ why a non-zero bit is carried beside each sign.
 The sticky flag is merged with the accumulator's saturation flag onto one
 output pin, all eight having been allocated already: \texttt{UNTRUSTED} means
 numeric overflow \emph{or} a void guarantee. Both mean the same thing to a
-caller, and the host holds the weights so it can always tell which. That merge
-cost observability, and the mutation suite caught the loss within minutes---the
-saturation tests happened to violate the sign condition too, so a
-saturation-specific mutant could hide behind the guard.
+caller, and the host holds the weights so it can always tell which.
 
 The guard covers carbohydrate only. We built and measured a second guard for
 the fibre direction and declined it: 187 flip-flops against 168, extrapolating
 to roughly 87\,\% utilisation, too close to the edge, and it buys the weaker of
 the two claims---fibre's direction is domain knowledge our data supports only
-marginally ($r=-0.051$). That guarantee therefore still relies on the host using
-a constrained objective.
+marginally ($r=-0.051$). That guarantee therefore still relies on the host
+using a constrained objective.
 
 \section{Data and Training}
 
 We use CGMacros~\cite{cgmacros}, 45 participants with concurrent continuous
-glucose monitoring and photographed, macronutrient-labelled meals. The target is
+glucose monitoring and photographed, macronutrient-labelled meals. It is public
+and de-identified; this is secondary analysis and required no new ethical
+approval. The target is
 two-hour incremental area under the glucose curve. Splits are grouped by
 participant throughout; a random row split would place one person's meals on
 both sides and inflate every number, since individual response varies most.
@@ -317,11 +321,11 @@ against a documented 176 being enough to lift the training standard deviation
 for fibre to 32~g against a median of 3~g. Filtering against the published
 ranges improves out-of-fold $R^2$ from $+0.215$ to $+0.225$.
 
-Separately, and documented in the dataset rather than discovered here: CGMacros
-breakfasts and lunches are standardised test meals, the 383 usable breakfasts
-containing only 6 distinct macronutrient combinations. Any breakfast-only
-analysis is therefore a \emph{personalisation} study rather than a
-meal-composition one, which is why we train across all meal types.
+Documented in the dataset rather than discovered here: CGMacros breakfasts and
+lunches are standardised, the 383 usable breakfasts having only 6 distinct
+macronutrient combinations---so a breakfast-only analysis is a
+\emph{personalisation} study, not a meal-composition one, and we train across
+all meal types.
 
 The model takes six meal features---carbohydrate, fibre, fat, protein, pre-meal
 glucose, time of day---with eight hidden units. Participant-level biological
@@ -379,13 +383,17 @@ ordinary thing a host would do, and deliberately generous: the refit sees all
 of that person's meals rather than the eight the curve above argues for.
 
 It never satisfies the condition. All 44 scored participants yield a violating
-weight set, with a median of 3 of 8 offending hidden units, and the result is
-unchanged across fine-tuning budgets from 20 to 400 epochs. We note for
-accuracy that the population model is already violating before any
-personalisation---an unconstrained fit simply does not satisfy
-(\ref{eq:sign}). Personalisation is what makes this undecidable offline: it is
-not that per-person refits are uniquely bad, but that the weight set the device
-runs is not the weight set anyone certified.
+weight set, median 3 of 8 offending hidden units, unchanged across fine-tuning
+budgets from 20 to 400 epochs. The population model is already violating before
+any personalisation, so personalisation is not what breaks (\ref{eq:sign})---it
+is what makes the condition undecidable offline, since the weight set the device
+runs is not the one anyone certified.
+
+The guard is therefore not redundant with our own training. Bias-only
+adaptation cannot violate (\ref{eq:sign})---it moves $b_2$ only---while full
+refitting can, and here always does. Nothing in the stream distinguishes them,
+which is why the check belongs at the interface. \texttt{UNTRUSTED} marks a
+stream that left the constrained path, not a verdict on every patient.
 
 \subsection{What monotonicity costs}
 
@@ -404,15 +412,15 @@ not survive correction for the roughly ten comparisons made across this project.
 \subsection{Clinical behaviour}
 
 Cross-fitting so that all 45 participants are held out exactly once
-(1308 meals), out-of-fold $R^2$ is $+0.225$. The use case is within-person
-ranking, and there the median Spearman
+(1308 meals), out-of-fold $R^2$ is $+0.225$. That is modest: six meal features,
+grouped splits, all meal types, no held-out cohort. The use case is
+within-person ranking, and there the median Spearman
 correlation is $+0.382$ (IQR $+0.215$ to $+0.495$), positive in 41 of 44
 participants. By glycemic status (ADA A1c thresholds), $R^2$ is $+0.074$ for
 15 healthy, $+0.077$ for 16 pre-diabetic and $+0.142$ for 14 type~2 diabetic
 participants, with mean absolute error rising from 1557 to 2329
-mg/dL$\cdot$min. Absolute error grows with severity, but so does the response
-being predicted; per-group $R^2$ is not comparable across groups because
-within-group variance differs.
+mg/dL$\cdot$min---error grows with severity, but so does the response being
+predicted.
 
 \subsection{Silicon and verification}
 
@@ -432,8 +440,6 @@ for three meals a day for a year.}
 Flip-flops                 & 148       & \textbf{168} \\
 Standard cells             & 1330      & \textbf{1443} \\
 Utilisation                & 76.35\,\% & \textbf{83.53\,\%} \\
-Setup slack @ 20\,ns       & $+9.89$\,ns  & $+10.08$\,ns \\
-Hold slack                 & $+0.121$\,ns & $+0.120$\,ns \\
 DRC / LVS / antenna        & 0         & \textbf{0} \\
 \bottomrule
 \end{tabular}
@@ -510,8 +516,8 @@ checkable at the interface for 20 flip-flops, because both operands already
 cross the pins. Such a guarantee can also hold throughout a datapath and still
 be destroyed by the fixed-width field that reports it.
 
-RTL, testbenches, reference models and analysis scripts, including the ones
-that regenerate every figure here, are at
+RTL, testbenches, reference models and the scripts that regenerate every figure
+here are at
 \url{https://github.com/kush1434/proof}. Trained weights are excluded: CGMacros
 is CC~BY-NC-SA and the repository is Apache-2.0.
 
@@ -566,6 +572,15 @@ tolerance for spiking neural network accelerators under soft errors,'' in
 \bibitem{xiang2022}
 W. Xiang, ``Runtime safety monitoring of neural-network-enabled dynamical
 systems,'' \emph{IEEE Trans. Cybernetics}, vol.~52, no.~9, pp.~9587--9596, 2022.
+
+\bibitem{zeevi2015}
+D. Zeevi, T. Korem, N. Zmora, et al., ``Personalized nutrition by prediction of
+glycemic responses,'' \emph{Cell}, vol.~163, no.~5, pp.~1079--1094, 2015.
+
+\bibitem{berry2020}
+S.~E. Berry, A.~M. Valdes, D.~A. Drew, et al., ``Human postprandial responses
+to food and potential for precision nutrition,'' \emph{Nature Medicine},
+vol.~26, no.~6, pp.~964--973, 2020.
 
 \bibitem{cgmacros}
 A. Das, D. Kerr, N. Glantz, W. Bevier, R. Santiago, R. Gutierrez-Osuna, and

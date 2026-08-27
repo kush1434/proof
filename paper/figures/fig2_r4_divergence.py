@@ -117,7 +117,7 @@ def main():
                                 shrinkA=0, shrinkB=2))
 
     ax.set_xlabel("carbohydrate input $x_c$ (INT8 counts)")
-    ax.set_ylabel("Mode B output")
+    ax.set_ylabel("output value")
     ax.set_xlim(xs[sl][0], xs[sl][-1])
     ax.set_ylim(-42000, 52000)
     ax.set_yticks([-32768, 0, 32767])
