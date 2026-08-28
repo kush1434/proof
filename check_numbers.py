@@ -81,6 +81,7 @@ CANONICAL = [
     ("top-level tests",        "43",      "test/run.py"),
     ("clock-to-output",        "1975",    "test/run.py --gates --sdf ... --module test_sdf"),
     ("cohort mean iAUC",       "3150",    "model/clinical.py"),
+    ("guard rejections correct", "44 refits", "model/false_reject.py"),
 ]
 
 # (retired value, its replacement, why). The replacement matters: a line

@@ -84,7 +84,7 @@ def main():
 
     ax.axhline(FIELD_MAX, color=style.GREY, ls=(0, (3, 2)), lw=0.7, zorder=1)
     ax.text(xs[sl][-1] - 0.5, FIELD_MAX + 1400, "16-bit field limit",
-            fontsize=6, color=style.GREY, ha="right")
+            fontsize=7.0, color=style.GREY, ha="right")
 
     ax.plot(xs[sl], internal[sl], "-", color=style.BLUE, lw=1.3, zorder=4,
             label="internal value")
@@ -97,22 +97,19 @@ def main():
     # host is handed falls by 62,502.
     xa, xb = xs[wrap - 1], xs[wrap]
     ya, yb = truncated[wrap - 1], truncated[wrap]
-    ax.annotate("", xy=(xb, yb), xytext=(xa, ya),
-                arrowprops=dict(arrowstyle="->", color=style.VERM, lw=0.9,
-                                shrinkA=1.5, shrinkB=1.5))
     def num(v):
         return f"{v:,}".replace("-", "$-$")
 
     ax.annotate(f"+1 count of carbohydrate:\nreported {num(ya)} "
                 f"$\\rightarrow$ {num(yb)}",
                 xy=(xb + 0.4, (ya + yb) / 2), xytext=(xb + 3.5, -3000),
-                fontsize=6.2, color=style.VERM, linespacing=1.25,
+                fontsize=7.0, color=style.VERM, linespacing=1.25,
                 arrowprops=dict(arrowstyle="-", color=style.VERM, lw=0.5,
                                 shrinkA=0, shrinkB=2))
     ax.annotate(f"true value rises\n{num(internal[wrap-1])} "
                 f"$\\rightarrow$ {num(internal[wrap])}",
                 xy=(xb + 1.5, internal[wrap]), xytext=(xa - 22, 43000),
-                fontsize=6.2, color=style.BLUE, linespacing=1.25,
+                fontsize=7.0, color=style.BLUE, linespacing=1.25,
                 arrowprops=dict(arrowstyle="-", color=style.BLUE, lw=0.5,
                                 shrinkA=0, shrinkB=2))
 

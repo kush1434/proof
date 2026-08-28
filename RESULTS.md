@@ -686,6 +686,37 @@ Three consequences, in order of how much they matter:
    checkability at the interface, and it should be stated as a choice rather
    than discovered by a reviewer.
 
+### 9.2 When the guard rejects, is it right to?
+
+`model/false_reject.py` (added 2026-08-27). §9.1 says the sign condition is
+sufficient but not necessary, so the guard can decline a weight set that is in
+fact monotone, and that §10 and the paper both said the rate was unmeasured.
+It is now bounded.
+
+| | |
+|---|---|
+| weight sets the guard rejects (the 44 refits of §1.3) | 44 |
+| proved genuinely non-monotone by a falling sweep | **44** |
+| **control**: same weights, offending signs flipped so the condition holds | **0 of 44 fell** |
+
+⚠️ **The claim is one-directional and must stay that way.** Monotonicity must
+hold at *every* setting of the other five inputs, so sweeping carbohydrate at
+sampled settings can **find** a counterexample but never establish that none
+exists. A falling sweep proves the set non-monotone and the rejection correct;
+a flat sweep proves nothing. So this is a **lower bound on how often the guard
+is right**, never an estimate of how often it is wrong. Reporting “the fraction
+that are monotone” from a sampled sweep would be unsound.
+
+The control is what makes the 44 of 44 meaningful: a detector that called
+everything non-monotone would score the same. Flipping the offending layer-2
+signs leaves the magnitudes, contexts and sweep identical while making the
+condition hold, and then **nothing falls**. Verified in both directions, as
+`mutate.sh` is. Stable at 4 and at 24 sampled contexts.
+
+The sets on which no counterexample was found are **not** shown to be monotone.
+There are none here, so the bound is tight on this cohort — but it is a bound
+on *these 44 refits*, not a general false-reject rate.
+
 **A near-neighbour worth adding: proof-carrying hardware.** Drzevitzky, Kastens
 & Platzner, *Proof-Carrying Hardware: Towards Runtime Verification of
 Reconfigurable Modules*, ReConFig 2009, pp. 189–194

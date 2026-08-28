@@ -71,8 +71,8 @@ def main():
 
     # ---------------------------------------------------------- panel (a) --
     ax1.axhline(r2[0], color=style.GREY, ls=(0, (4, 2)), lw=0.8, zorder=1)
-    ax1.text(16.4, r2[0], "population\nmodel", color=style.GREY, fontsize=6,
-             va="center", ha="left", linespacing=1.1)
+    ax1.text(16.0, r2[0] - 0.018, "population model", color=style.GREY,
+             fontsize=7.0, va="top", ha="right")
     ax1.axhline(0, color=style.LIGHT, lw=0.6, zorder=0)
     ax1.plot(ks, r2, "-o", color=style.BLUE, ms=3.2, mfc="white", mew=1.0,
              zorder=3, clip_on=False)
@@ -80,7 +80,7 @@ def main():
     # The one point that argues for the whole design decision.
     ax1.annotate("one meal is\nworse than none",
                  xy=(1, r2[1]), xytext=(2.6, -0.05),
-                 fontsize=6.2, color=style.VERM, linespacing=1.15,
+                 fontsize=7.0, color=style.VERM, linespacing=1.15,
                  arrowprops=dict(arrowstyle="-", color=style.VERM, lw=0.6,
                                  shrinkA=0, shrinkB=2))
     ax1.plot([1], [r2[1]], "o", color=style.VERM, ms=3.2, zorder=4,
@@ -116,12 +116,12 @@ def main():
     ax2.text(-0.5, 660, "(b)", fontsize=8, fontweight="bold", va="top")
 
     ax2.text(0.012, 0.045, "$\\downarrow$ personalising helps",
-             transform=ax2.transAxes, fontsize=6.2, color=style.GREY)
+             transform=ax2.transAxes, fontsize=7.0, color=style.GREY)
 
     # Filled marker = the interval excludes zero. Say so, once.
     ax2.text(4.6, 430,
              "filled: 95 % CI excludes zero\nopen: not resolved",
-             fontsize=6.2, color=style.GREY, linespacing=1.25)
+             fontsize=7.0, color=style.GREY, linespacing=1.25)
 
     # ------------------------------------------------------------- x axis --
     ax2.set_xticks(ks)
@@ -137,10 +137,10 @@ def main():
                 ax.axvspan(k - 0.9, k + 0.9, color="#F4F4F4", zorder=0, lw=0)
         ax2.annotate(f"{n}", xy=(k, 0), xycoords=("data", "axes fraction"),
                      xytext=(0, -17), textcoords="offset points",
-                     fontsize=5.8, color=style.GREY, ha="center", va="top")
+                     fontsize=7.0, color=style.GREY, ha="center", va="top")
     ax2.annotate("participants", xy=(0, 0), xycoords=("axes fraction", "axes fraction"),
                  xytext=(-4, -17), textcoords="offset points",
-                 fontsize=5.8, color=style.GREY, ha="right", va="top")
+                 fontsize=7.0, color=style.GREY, ha="right", va="top")
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     style.save(fig, OUT)

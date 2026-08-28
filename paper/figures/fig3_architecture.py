@@ -73,7 +73,7 @@ def main():
     ax.set_ylim(0, 42)
     ax.axis("off")
 
-    def box(x, y, w, h, label, fill, edge=style.INK, fs=6.6, tc=None):
+    def box(x, y, w, h, label, fill, edge=style.INK, fs=7.0, tc=None):
         ax.add_patch(FancyBboxPatch(
             (x, y), w, h, boxstyle="round,pad=0,rounding_size=0.7",
             fc=fill, ec=edge, lw=0.7, zorder=3))
@@ -94,9 +94,9 @@ def main():
 
     # ============================================= host and the byte stream ==
     box(0.5, 34.6, 15.0, 6.0,
-        "HOST\n(not trusted)\nper-patient weights", HOST_FILL, fs=6.2)
+        "HOST\n(not trusted)\nper-patient weights", HOST_FILL, fs=7.0)
     ax.text(27.5, 41.8, "8-bit payload, with is_weight / last / mode",
-            fontsize=6, color=style.GREY, va="top")
+            fontsize=7.0, color=style.GREY, va="top")
     arrow(15.5, 37.6, 26.8, 37.6, color=style.GREY)
 
     def cells(x, y, items, hi=None):
@@ -108,7 +108,9 @@ def main():
                 ec=GUARD if on else style.GREY, lw=1.0 if on else 0.5,
                 zorder=3))
             ax.text(x + w / 2, y + 1.45, txt, ha="center", va="center",
-                    fontsize=5.7, zorder=4, color=GUARD if on else style.INK)
+                    fontsize=7.0, zorder=6,
+                    bbox=dict(facecolor="white", edgecolor="none",
+                              pad=0.8), color=GUARD if on else style.INK)
             centres.append(x + w / 2)
             x += w
         return centres
@@ -119,13 +121,13 @@ def main():
     c2 = cells(27.5, 32.6, [(6.5, "$s_2$"), (11, "$W_2[0]$"), (11, "$W_2[1]$"),
                             (8, "$\\ldots$"), (11, "$W_2[7]$"),
                             (14, "bias, LAST")])
-    ax.text(26.8, 37.75, "layer 1,\nneuron $j$", fontsize=5.9, ha="right",
+    ax.text(25.4, 37.75, "layer 1,\nneuron $j$", fontsize=7.0, ha="right",
             va="center", linespacing=1.2)
-    ax.text(26.8, 34.05, "layer 2", fontsize=5.9, ha="right", va="center")
+    ax.text(25.4, 34.05, "layer 2", fontsize=7.0, ha="right", va="center")
 
     ax.plot([0.5, 107.5], [31.4, 31.4], ls=(0, (3, 2.2)), lw=0.7,
             color=style.GREY, zorder=1)
-    ax.text(0.5, 31.7, "chip boundary", fontsize=5.9, color=style.GREY,
+    ax.text(0.5, 31.7, "chip boundary", fontsize=7.0, color=style.GREY,
             va="bottom")
 
     # ================================================== the shared datapath ==
@@ -135,8 +137,8 @@ def main():
     arrow(14.5, 26.0, 17.0, 26.0)
     arrow(32.5, 26.0, 35.0, 26.0)
     arrow(7.75, 34.6, 7.75, 28.4, color=style.GREY)
-    ax.text(1.0, 22.9, "a saturating sum is monotone; a wrapping one is not",
-            fontsize=5.8, color=style.BLUE, va="top")
+    ax.text(1.0, 22.6, "a saturating sum is monotone;\na wrapping one is not",
+            fontsize=7.0, color=style.BLUE, va="top", linespacing=1.25)
 
     # h_j is pushed into the HEAD of hreg, so it enters from above. It has to
     # get past the layer-1 tap channel, and no routing avoids that: the tap
@@ -153,7 +155,7 @@ def main():
     ax.plot([CHAN_X + 0.9, HEAD_X], [29.6, 29.6], color=style.INK, lw=0.7,
             zorder=5, solid_capstyle="round")
     arrow(HEAD_X, 29.6, HEAD_X, 27.7)
-    ax.text(56.0, 30.0, "$h_j$", fontsize=6.2, va="bottom", ha="left")
+    ax.text(56.0, 30.0, "$h_j$", fontsize=7.0, va="bottom", ha="left")
 
     # ========================================= the three lockstep registers ==
     rows = [
@@ -171,73 +173,74 @@ def main():
         # RTL name only. The gloss belongs in the caption; keeping it here
         # collided with the W2[k] bus routed outside the block.
         ax.text(REG_END + 1.0, y + h / 2, name, ha="left", va="center",
-                fontsize=6.2, color=ec, family="monospace")
+                fontsize=7.0, color=ec, family="monospace")
 
     ax.add_patch(FancyArrowPatch(
         (REG_END - 0.5, 28.9), (REG_X + 0.5, 28.9), arrowstyle="-|>",
         mutation_scale=6, color=style.GREY, lw=0.7, zorder=5))
     ax.text(REG_X + 4.7 * CELL_W, 16.4,
             "rotates one place per layer-2 weight byte, all three together",
-            fontsize=5.8, color=style.GREY, ha="center", va="top")
-    ax.text(HEAD_X - 1.6, 16.5, "head", fontsize=6.0, ha="right", va="top")
+            fontsize=7.0, color=style.GREY, ha="center", va="top")
+    ax.text(HEAD_X - 1.6, 16.5, "head", fontsize=7.0, ha="right", va="top")
 
     ax.add_patch(Rectangle((REG_X - 0.7, 17.1), N_H * CELL_W + 1.4, 6.9,
                            fc="none", ec=GUARD, lw=0.6, ls=(0, (2, 1.6)),
                            zorder=2))
 
     # =============================================== the guard: layer-1 tap ==
-    route([(c1[1], 36.3), (c1[1], CHAN_Y), (CHAN_X, CHAN_Y), (CHAN_X, 23.6)],
+    TAP_X = 45.0     # the W_2[0] / W_2[1] boundary, inside the W_1[j][c] cell
+    route([(TAP_X, 36.3), (TAP_X, CHAN_Y), (CHAN_X, CHAN_Y), (CHAN_X, 23.6)],
           color=GUARD, lw=0.9)
     box(42.0, 17.7, 19.0, 5.8,
         "capture the sign bit\nand \"is non-zero\" of\nthe FIRST weight byte",
-        GUARD_FILL, edge=GUARD, fs=6.0, tc=GUARD)
+        GUARD_FILL, edge=GUARD, fs=7.0, tc=GUARD)
     arrow(61.0, 22.2, 62.8, 22.2, color=GUARD, lw=0.9)
     arrow(61.0, 19.0, 62.8, 19.0, color=GUARD, lw=0.9)
     ax.text(52.4, 26.4, "$W_1[j][c]$\n(carbohydrate\nis input 0)",
-            fontsize=5.8, color=GUARD, ha="left", va="center",
+            fontsize=7.0, color=GUARD, ha="left", va="center",
             linespacing=1.25)
 
     # ======================================== the guard: layer-2 comparison ==
     route([(c2[4], 32.6), (c2[4], 32.0), (FAR_X, 32.0), (FAR_X, 5.4),
            (67.2, 5.4)], color=GUARD, lw=0.9)
-    ax.text(84.0, 5.8, "$W_2[k]$", fontsize=6.2, color=GUARD, ha="center",
+    ax.text(84.0, 5.8, "$W_2[k]$", fontsize=7.0, color=GUARD, ha="center",
             va="bottom")
 
-    box(40.0, 2.4, 27.0, 6.0,
+    box(40.0, 2.4, 31.5, 6.0,
         "sign disagrees with the head,\nand both are non-zero\n"
-        "$\\Rightarrow$ this weight set cannot be monotone",
-        GUARD_FILL, edge=GUARD, fs=6.0, tc=GUARD)
+        "$\\Rightarrow$ this weight set does not admit the guarantee",
+        GUARD_FILL, edge=GUARD, fs=7.0, tc=GUARD)
     arrow(HEAD_X, 17.6, HEAD_X, 8.5, color=GUARD, lw=0.9)
 
     box(21.0, 4.4, 15.0, 5.0, "sticky\nmono_viol", GUARD_FILL, edge=GUARD,
-        fs=6.4, tc=GUARD)
+        fs=7.0, tc=GUARD)
     arrow(40.0, 6.9, 36.2, 6.9, color=GUARD, lw=0.9)
 
     # ====================================== one pin, two ways to be wrong ==
-    box(6.0, 10.6, 16.0, 4.4, "acc_saturated", DATA_FILL, fs=6.4)
+    box(6.0, 10.6, 16.0, 4.4, "acc_saturated", DATA_FILL, fs=7.0)
     arrow(17.5, 23.6, 14.4, 15.2, color=style.INK, lw=0.6)
 
     ax.add_patch(Circle((14.0, 6.9), 1.35, fc="white", ec=style.INK, lw=0.7,
                         zorder=5))
-    ax.text(14.0, 6.9, "$\\geq$1", fontsize=5.4, ha="center", va="center",
+    ax.text(14.0, 6.9, "$\\geq$1", fontsize=7.0, ha="center", va="center",
             zorder=6)
     arrow(14.0, 10.6, 14.0, 8.4, color=style.INK, lw=0.6)
     arrow(21.0, 6.9, 15.5, 6.9, color=GUARD, lw=0.6)
     arrow(12.6, 6.9, 0.4, 6.9, color=style.INK, lw=1.0, z=6)
-    ax.text(0.4, 7.4, "UNTRUSTED", fontsize=6.6, fontweight="bold",
+    ax.text(0.4, 7.4, "UNTRUSTED", fontsize=7.0, fontweight="bold",
             ha="left", va="bottom")
     ax.text(0.4, 5.6, "overflow, or a\nvoid guarantee",
-            fontsize=5.6, color=style.GREY, ha="left", va="top",
+            fontsize=7.0, color=style.GREY, ha="left", va="top",
             linespacing=1.2)
 
     # ------------------------------------------------------------- legend --
     ax.add_patch(Rectangle((26.0, 11.4), 3.0, 1.9, fc=GUARD_FILL, ec=GUARD,
                            lw=0.9, zorder=3))
     ax.text(30.2, 12.35, "added by the guard: 20 flip-flops of the 168 built",
-            fontsize=6.2, va="center", color=GUARD)
+            fontsize=7.0, va="center", color=GUARD)
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    style.save(fig, OUT)
+    style.save(fig, OUT, width=style.WIDE)
 
 
 if __name__ == "__main__":

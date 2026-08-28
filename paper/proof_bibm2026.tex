@@ -86,7 +86,7 @@ optimistically biased upper bounds.
 \end{abstract}
 
 \begin{IEEEkeywords}
-monotonic neural networks, hardware safety, quantized inference, glycemic
+monotonic neural networks, hardware safety, quantised inference, glycemic
 response, open-source silicon
 \end{IEEEkeywords}
 
@@ -124,21 +124,19 @@ one parameter from about eight logged meals---three days---improves
 per-participant error by a margin whose 95\,\% interval excludes zero, while a
 single meal is measurably \emph{worse} than none
 (Fig.~\ref{fig:personalisation}). The precondition really does fail: no
-unconstrained fit we tried satisfies the sign condition, in 44 of 44
-participants. It is nevertheless checkable in hardware for 20 flip-flops,
+unconstrained fit we tried satisfies the sign condition---not the population
+model, and not one of 44 per-participant refits. It is nevertheless checkable
+in hardware for 20 flip-flops,
 because both operands already cross the pins
 (Fig.~\ref{fig:arch}). And such a property can hold internally while breaking
 at the interface---our datapath was provably monotone while the output field
 truncated, and truncation wraps (Fig.~\ref{fig:r4}).
 
-We are explicit throughout about what the evidence does not support: we do not
-claim the network beats its baseline, and we do not claim monotonicity is free.
-
 \section{Related Work}
 
-\textbf{Personalised glycemic response.} That postprandial response to an
-identical meal varies widely between people, and is predictable from personal
-features, is established~\cite{zeevi2015,berry2020}. We take that premise as
+\textbf{Personalised glycemic response.} Postprandial response to an identical
+meal varies widely between people and is predictable from personal
+features~\cite{zeevi2015,berry2020}. We take that premise as
 given; our contribution is its hardware consequence.
 
 \textbf{Monotonicity, established and certified.} Architectures that guarantee
@@ -150,13 +148,14 @@ mixed-integer programming --- offline, on a fixed model, and costly. They also
 name the predicate we check, \emph{sign verification}, and report that their
 certified networks often fail it. The condition is sufficient, not necessary, so
 our guard is sound but not complete: it declines monotone weight sets it cannot
-check at a pin interface, at a rate we do not measure.
+check at a pin interface. We find no such case here: for all 44 refits it
+rejects, a falling response exists.
 
-\textbf{Quantization versus structural guarantees.} Recent work asks whether
-quantization preserves monotone-operator properties~\cite{quantmon2026}. It is
+\textbf{Quantisation versus structural guarantees.} Recent work asks whether
+quantisation preserves monotone-operator properties~\cite{quantmon2026}. It is
 the nearest hit to ours and still distinct: monotone-operator theory rather
 than input--output monotonicity, an offline norm-based certificate, and no
-hardware. Formal verification of quantized networks~\cite{qvip2022} is likewise
+hardware. Formal verification of quantised networks~\cite{qvip2022} is likewise
 offline, and verifies the network rather than the interface it arrives through.
 
 \textbf{Hardware that inspects weights.} Accelerators are commonly protected by
@@ -208,7 +207,8 @@ rescaling is an arithmetic shift. Every
 neuron of both layers is the same saturating dot product over a serial
 $8\times8$ multiplier and a 24-bit accumulator; only the source of the
 activations differs. In layer~1 the host supplies them, re-streaming the input
-vector per hidden neuron to save 48 flip-flops. In layer~2 the chip supplies
+vector per hidden neuron rather than storing it in 48 flip-flops. In layer~2
+the chip supplies
 them from the hidden-activation register.
 
 \subsection{The monotonicity argument, and where it broke}
@@ -293,7 +293,8 @@ why a non-zero bit is carried beside each sign.
 
 The sticky flag is merged with the accumulator's saturation flag onto one
 output pin, all eight having been allocated already: \texttt{UNTRUSTED} means
-numeric overflow \emph{or} a void guarantee. Both mean the same thing to a
+numeric overflow \emph{or} a weight set that does not admit the guarantee.
+Both mean the same thing to a
 caller, and the host holds the weights so it can always tell which.
 
 The guard covers carbohydrate only. We built and measured a second guard for
@@ -332,9 +333,9 @@ glucose, time of day---with eight hidden units. Participant-level biological
 features are free in hardware, since the input count is not fixed in silicon,
 but they do not earn their place: adding A1c, BMI, age, fasting glucose and
 insulin together collapses $R^2$ from $+0.225$ to $-0.014$, each being fitted
-from 45 points. A1c alone raises population $R^2$ to $+0.256$ but leaves
-within-person ranking unchanged while \emph{reducing} the participants ranked
-in the right direction from 41 to 37---and ranking is the use case. No hidden
+from 45 points. A1c alone raises population $R^2$ to $+0.256$ and barely moves
+the median within-person correlation, while \emph{reducing} the participants
+ranked in the right direction from 41 to 37---and ranking is the use case. No hidden
 width from 4 to 12 is distinguishable from 8 for the constrained model that
 ships, so the model is data-limited rather than capacity-limited. Quantisation
 scales were selected by search over a held-out fold, giving a mean float-to-INT8
@@ -498,7 +499,7 @@ held-out meals overflow the 16-bit field at any requantisation shift from 0 to
 synthetic weight sets, but we make no claim of patient harm on real data.
 
 \textbf{The guard covers one of two claimed directions}, as discussed above.
-The chip is a $1\times1$ tile fabricated on a shared multi-project wafer, and
+The chip is a $1\times1$ tile on a shared multi-project wafer, and
 we report pre-silicon signoff results, not measurements from returned parts.
 
 \textbf{Novelty is asserted from six literature searches}, which is weak

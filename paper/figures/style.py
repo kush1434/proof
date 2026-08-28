@@ -65,9 +65,51 @@ def setup():
     })
 
 
-def save(fig, path_noext):
-    """Write PDF (for the paper) and PNG (for looking at)."""
+def fit_to_width(fig, target_in, tol_pt=0.25, tries=8):
+    """Resize the figure so its TIGHT bounding box is exactly `target_in` wide.
+
+    This module promises figures are authored at final size and never scaled in
+    LaTeX. `savefig.bbox = "tight"` quietly broke that promise: it crops to the
+    drawn content, so the saved width is whatever the labels happen to need --
+    3.54 in for Fig. 1 and 3.25 in for Fig. 2. Both are then stretched to
+    \columnwidth by \includegraphics, by 0.975x and 1.060x, so 8 pt type
+    printed at 7.80 pt in one figure and 8.48 pt in the next. An 8.7 % font
+    mismatch between adjacent figures is exactly the tell this module was
+    written to avoid, and it was doing it to itself.
+
+    Fonts are in points and do not scale with the canvas, so growing the canvas
+    does not grow the margins proportionally: the fixed point is found by
+    iterating rather than by one division. Converges in two or three passes.
+    """
+    for _ in range(tries):
+        fig.canvas.draw()
+        bb = fig.get_tightbbox(fig.canvas.get_renderer())
+        err_pt = (target_in - bb.width) * 72.0
+        if abs(err_pt) <= tol_pt:
+            return bb.width
+        w, h = fig.get_size_inches()
+        # Grow the canvas by the shortfall, keeping the aspect of the axes area.
+        fig.set_size_inches(w + (target_in - bb.width), h)
+    return bb.width
+
+
+def save(fig, path_noext, width=COL):
+    """Write PDF (paper) and PNG (viewing) at EXACTLY `width` inches.
+
+    Two steps, and both are needed. fit_to_width grows the canvas until the
+    content nearly fills the target, so nothing is cropped. Then the save uses
+    an explicit Bbox rather than "tight", because savefig recomputes its own
+    tight box at write time and lands a few hundredths of an inch off -- which
+    is the whole bug this is fixing. An explicit box is exact by construction.
+    """
+    from matplotlib.transforms import Bbox
+
+    fit_to_width(fig, width)
+    fig.canvas.draw()
+    bb = fig.get_tightbbox(fig.canvas.get_renderer())
+    cx = 0.5 * (bb.x0 + bb.x1)
+    box = Bbox.from_extents(cx - width / 2.0, bb.y0, cx + width / 2.0, bb.y1)
     for ext in ("pdf", "png"):
-        fig.savefig(f"{path_noext}.{ext}")
+        fig.savefig(f"{path_noext}.{ext}", bbox_inches=box, pad_inches=0.0)
     plt.close(fig)
-    print(f"  wrote {path_noext}.pdf / .png")
+    print(f"  wrote {path_noext}.pdf / .png  ({width:.3f} x {box.height:.3f} in)")
