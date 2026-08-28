@@ -116,11 +116,23 @@ number it illustrated, and it is worth restoring for any venue with more room.
   maintainer's own post naming the venue (IEEE Xplore doc 10584359). Xplore
   and ResearchGate both refused to load. Confirm on Xplore before submitting.
 
-**The page count is now the open question.** The paper compiled to exactly 5
-pages at `eee649e` with 3365 body words. The working tree is 3361 — four words
-under, with the author block filled in and every addition paid for by a named
-cut. That is a proxy, not a measurement: only the `paper` workflow knows the
-real number. **Push and read `pdfinfo` before believing any of this.**
+**The page count is settled.** `dc35024` compiles to **5 pages, 0 overfull
+boxes, no undefined references**, with the author block filled in, the external
+review actioned, Zeevi and PREDICT cited, and the figures rebuilt. 3356 body
+words. All four workflows green. The PDF from that run is the submission file.
+
+**Figures are now IEEE-clean and that took two real fixes.** `style.py` promised
+figures are authored at final size and never scaled, and `savefig.bbox="tight"`
+broke it: 8 pt type printed at 7.80 pt in Fig. 1 and 8.48 pt in Fig. 2. `save()`
+now writes an explicit `Bbox`, so all three scale 1.0000×. Smallest type was
+5.4 pt against this module's own 8 pt floor; everything is now ≥ 7 pt. And
+Fig. 3 said "this weight set cannot be monotone" — the claim §10 forbids —
+after the prose had been corrected for it.
+
+**The guard's false-reject rate is no longer unmeasured.** `model/false_reject.py`,
+RESULTS §9.2: all 44 refits the guard rejects are provably non-monotone, with a
+control at 0 of 44. One-directional by construction — a lower bound on how often
+the guard is right, never an estimate of how often it is wrong.
 
 ---
 
