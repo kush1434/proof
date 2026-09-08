@@ -110,12 +110,12 @@ def main():
                    linespacing=1.2)
     # Room for the participant-count row, which sits between the tick labels
     # and the axis label.
-    ax2.set_xlabel("meals logged before personalising, $k$", labelpad=15)
+    ax2.set_xlabel("meals logged before personalizing, $k$", labelpad=15)
     ax2.set_ylim(-460, 700)
     ax2.set_yticks([-400, -200, 0, 200, 400, 600])
     ax2.text(-0.5, 660, "(b)", fontsize=8, fontweight="bold", va="top")
 
-    ax2.text(0.012, 0.045, "$\\downarrow$ personalising helps",
+    ax2.text(0.012, 0.045, "$\\downarrow$ personalizing helps",
              transform=ax2.transAxes, fontsize=7.0, color=style.GREY)
 
     # Filled marker = the interval excludes zero. Say so, once.
