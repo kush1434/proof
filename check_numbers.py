@@ -47,6 +47,11 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 DOCS = [
+    # The repo's front door quotes silicon and accuracy figures, and until
+    # 2026-09-14 it was the stock Tiny Tapeout template and quoted nothing at
+    # all. Now that it does, it is gated like every other document -- a README
+    # is exactly where a retired number would sit unnoticed.
+    "README.md",
     "RESULTS.md",
     "VERIFICATION.md",
     "BUGS.md",
