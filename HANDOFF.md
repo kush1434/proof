@@ -1,7 +1,35 @@
 # Handoff
 
-Written 2026-08-15, updated 2026-08-18. Read this, then `RESULTS.md`, then
+Written 2026-08-15, updated 2026-09-15. Read this, then `RESULTS.md`, then
 `paper/NUMBERS-CHECK.md`. Everything else is detail.
+
+---
+
+## Where this stands, 2026-09-15
+
+**The paper is submitted.** Kush confirmed it on 2026-09-15. Notification is
+due **22 September**. Nothing further is required unless it is accepted.
+
+**The chip is finished and cannot be submitted yet, because the shuttle has no
+tiles free.** Everything technical is done: `main` is at `f290328`, all four
+workflows are green including `gds`, and `src/` is byte-identical to `c0a5792`,
+the commit whose GDS produced 83.53 %. The only thing missing is a tile.
+
+Kush reports that SwissChips hold a reserved block they are not using and that
+it is expected to free up on **18 September**. The shuttle closes **21
+September**, so that is a three-day window with no slack. Note that the public
+SwissChips sponsorship is **Swiss residents only** and covered **IHP 26a**
+(deadline 23 March 2026), not 26b — so the coupon route does not apply here;
+what is expected to free up is capacity, not funding. Cost is **€70** for the
+1×1 tile, shuttle inclusion only, and it needs a card.
+
+⚠️ **The `.tex` in this repo is NOT the version that was submitted.** The last
+paper commit before the 31 August deadline was `dc35024` (2026-08-27) — British
+spelling, `Device` / `Data and Training` headings. Kush's own prose revision
+(`bcae9d8`..`58fd0c2`, 2026-09-07) landed a week *after* submission: US
+spelling, noun-phrase headings, and two paragraphs deleted to hold 5 pages.
+If the paper is accepted, the camera-ready starts from what reviewers saw,
+so diff `dc35024` against `HEAD` before touching anything.
 
 ---
 
@@ -40,10 +68,13 @@ seniors).
 | `gds`, `precheck`, `gl_test`, `viewer` | pass |
 | `gl_test_sdf` | pass, all three corners — **on the `gate-level-sdf` branch; not merged to `main`** |
 
-⚠️ **The SDF work lives on the `gate-level-sdf` branch, not on `main`.** `main`
-is still `31890ed`. All four workflows are green on the branch, `gl_test_sdf`
-included, on all three corners — so §6.1 is CI-reproduced, not just measured
-locally. It is not merged.
+✅ **Merged 2026-09-14.** `gate-level-sdf` was fast-forwarded into `main`
+(`31890ed` → `58fd0c2`, 18 commits) and `main` is now the canonical branch —
+which matters because Tiny Tapeout builds the default branch. All four
+workflows are green on `main`, `gl_test_sdf` included, at all three corners.
+The merge carried the corrected `docs/info.md`: `main` had been shipping
+"the monotonicity property holds **only if** ..." — the necessity claim
+RESULTS.md §10 forbids — on the page that ships permanently with the chip.
 
 Worth recording because it is the cross-check that mattered: CI runs Tiny
 Tapeout's **Icarus 13**, the development machine runs oss-cad-suite's **14**,
@@ -340,7 +371,47 @@ Two older lessons, still live:
 `BUGS.md` "Areas deliberately not covered" is the full, honest list; the four
 above are the ones still worth acting on.
 
+**Added since:**
+
+- `model/false_reject.py` + RESULTS.md §9.2 — the guard's false-reject rate is
+  no longer unmeasured. All 44 refits it rejects are provably non-monotone,
+  with a control at 0 of 44 when the offending signs are flipped. The claim is
+  one-directional by construction: a lower bound on how often the guard is
+  right, never an estimate of how often it is wrong.
+- `README.md` was the stock Tiny Tapeout template until 2026-09-14 — it said
+  "add your Verilog files to the src folder" on the page the paper links to.
+  It now describes the chip and leads its accuracy section with R² = 0.225.
+  It is in `check_numbers.py`'s `DOCS` so it cannot harbour a stale figure.
+- Figures: all three now save at exactly IEEE column/text width, so
+  `\includegraphics` scales them 1.0000× and 8 pt type prints as 8 pt.
+  `savefig.bbox="tight"` had been defeating `style.py`'s own promise about
+  scaling. Smallest type raised from 5.4 pt to a 7 pt floor.
+
+**Still genuinely open, if there is time:**
+
+- The concordance number. Nobody has measured how often the chip orders a pair
+  of one person's meals correctly. ρ = 0.382 converts to roughly 6 in 10, but
+  that is a conversion under a normality assumption, not a measurement, and by
+  this project's own rule it is not a number yet. It is the clearest
+  one-sentence description of what the chip does and it is Python-only.
+- No host-side driver exists. The protocol knowledge is spread through the
+  cocotb helpers; nothing shows a person how to talk to the chip.
+- The guard's own correctness is not formally proved — 5 directed tests,
+  mutants M28/M29, 7 coverage bins. The lockstep invariant between `sgnreg`,
+  `nzreg` and `hreg` is small and might be provable.
+
 **Kush's to do:**
+
+- ~~Submit the paper~~ **done**, confirmed 2026-09-15. Notification 22 September.
+- **Get a tile.** Watch for the SwissChips block freeing up on 18 September.
+  Worth asking on the Tiny Tapeout Discord whether the release is real and
+  whether they keep a waitlist — the whole plan currently rests on a rumour.
+- **Have a payment method ready before the 18th.** €70. Kush is a minor, so
+  this is a parent's card, and it is the only thing that can still block
+  submission once a tile exists.
+- `clock_hz` stays at **1 MHz**. Decided 2026-09-14. Hardening already closed
+  at 20 ns, so this field is board configuration, not the STA target; changing
+  it would force a fresh `gds` run on a frozen design for no benefit.
 
 - ~~Fill in the author block~~ done 2026-08-25: sole author, HS track.
 - ~~Confirm the `\bibitem{tinytapeout}` citation form~~ done 2026-08-25, but
